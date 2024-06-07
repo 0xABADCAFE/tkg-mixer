@@ -1,0 +1,31 @@
+
+        include exec/types.i
+
+PADDING MACRO
+SOFFSET SET    SOFFSET+\1
+        ENDM
+
+BYTE_ARRAY  MACRO
+\1          EQU SOFFSET
+SOFFSET     SET SOFFSET+\2
+            ENDM
+
+WORD_ARRAY  MACRO
+\1          EQU SOFFSET
+SOFFSET     SET SOFFSET+(\2*2)
+            ENDM
+
+LONG_ARRAY  MACRO
+\1          EQU SOFFSET
+SOFFSET     SET SOFFSET+(\2*4)
+            ENDM
+
+STRUCT_ARRAY MACRO
+\1          EQU SOFFSET
+SOFFSET     SET SOFFSET+(\2_SizeOf_l*\3)
+            ENDM
+
+
+STRUCT_SIZE MACRO
+\1_SizeOf_l EQU SOFFSET
+            ENDM
