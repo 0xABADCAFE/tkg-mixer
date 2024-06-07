@@ -40,9 +40,11 @@ Aud_MixLine:
         lea     am_ChannelState(a0),a1
 
 .next_channel:
-        ; Get the channel sample data pointer in a2, skip if null
-        move.l  ac_SamplePtr_l(a1),a2
+        ; Get the channel sample data pointer in a2, skip if null. We need to move to a data register to set the CC
+        move.l  ac_SamplePtr_l(a1),d0
         beq.s   .done_channel
+
+        move.l  d0,a2
 
         ; Check there if data left to process. This really should never happen
         tst.w   ac_SamplesLeft_w(a1)
@@ -116,9 +118,6 @@ Aud_MixLine:
 
 .done_channel:
         add.w   #Aud_ChanelState_SizeOf_l,a1
-
-        ; WEIRD!!! No idea why, but unless I trigger a write here, nothing happens
-        add.l  #1,am_LinesProcessed_l(a0)
 
         dbra    d2,.next_channel
 
