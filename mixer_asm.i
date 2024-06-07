@@ -40,9 +40,10 @@ AUD_NUM_CHANNELS    EQU 16
         APTR am_RPacketSamplePtr_l ; contains normalised 8-bit sample data for the right channel
         APTR am_RPacketVolumePtr_l ; contains 6-bit volume modulation data for the right channel
 
-        ULONG  am_LinesProcessed_l;
         UWORD  am_AbsMaxL_w;
         UWORD  am_AbsMaxR_w;
+        UWORD  am_ShiftL_w;
+        UWORD  am_ShiftR_w;
 
         UWORD  am_SampleRateHz_w;
         UWORD  am_UpdateRateHz_w;

@@ -70,7 +70,7 @@ Aud_MixLine:
         move16  (a2)+,(a3)+
 
         ; Two step loop. The first iteration handles the left channel, the second iteration handles the right
-        move.w  #1,d3
+        moveq   #1,d3
         lea     am_AccumL_vw(a0),a4 ; note that the right accumulator immediately follows
         clr.l   d0
 
@@ -78,7 +78,7 @@ Aud_MixLine:
         move.b  d5,d0   ; d0 = 0-15, 0 silence, 1-14 are volume table selectors
         beq.s   .update_channel
 
-        sub.w   #1,d0   ; d0 = 0-14, now we need to multiply by 512 to get the table start
+        subq.w  #1,d0   ; d0 = 0-14, now we need to multiply by 512 to get the table start
         lsl.w   #8,d0   ;
         add.w   d0,d0   ; d0 = table position = vol * 256 * sizeof(WORD)
 
@@ -89,7 +89,7 @@ Aud_MixLine:
         ; Point a3 at the cache line of samples we loaded
         lea     am_FetchBuffer_vb(a0),a3
 
-        move.w  #CACHE_LINE_SIZE-1,d1    ; num samples in d1
+        moveq   #CACHE_LINE_SIZE-1,d1    ; num samples in d1
 
         ; Index the table by sample value (as unsigned word)
         clr.w   d0
@@ -117,21 +117,22 @@ Aud_MixLine:
         add.l   #CACHE_LINE_SIZE,ac_SamplePtr_l(a1)
 
 .done_channel:
-        add.w   #Aud_ChanelState_SizeOf_l,a1
+        lea  Aud_ChanelState_SizeOf_l(a1),a1
 
         dbra    d2,.next_channel
 
         ; Now we need to find the maximum sbsolute value of each accumulation buffer
         lea     am_AccumL_vw(a0),a4
+        lea     am_AbsMaxL_w(a0),a2
 
-        clr.w   d0 ; d0 will contain the next absolute value from the buffer
-        clr.l   d2
 
         ; Same two step trick as before, we process left then right consecutively
-        move.w  #1,d3
+        moveq  #1,d3
 
 .next_buffer:
-        move.w  #CACHE_LINE_SIZE-1,d1
+        clr.w   d0 ; d0 will contain the next absolute value from the buffer
+        clr.l   d2
+        moveq  #CACHE_LINE_SIZE-1,d1
 
 .next_buffer_value:
         move.w  (a4)+,d0
@@ -141,18 +142,35 @@ Aud_MixLine:
 
 .not_negative:
         cmp.w   d0,d2
-        bge.s   .not_bigger
+        bgt.s   .not_bigger
 
         move.w  d0,d2
 
 .not_bigger:
         dbra    d1,.next_buffer_value
 
-        swap    d2
+        move.w  d2,(a2)+
+
+        ; Now determine the normalisation factor
+        clr.l   d0
+
+        ; roll the most significant 6 bits (sign bit never set) into the low
+        rol.w   #7,d2
+
+        moveq   #5,d1
+
+.next_power:
+        btst    d1,d2
+        bne.s   .found_power
+
+        addq.w  #1,d0
+        dbra    d1,.next_power
+
+.found_power:
+        move.w  d0,2(a2)
+
         dbra    d3,.next_buffer
 
-        ; Write both back at once
-        move.l  d2,am_AbsMaxL_w(a0)
 
 .finished:
         movem.l (sp)+,d2/d3/d4/d5/a2/a3/a4

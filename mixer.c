@@ -104,7 +104,7 @@ Aud_Mixer *Aud_CreateMixer(
         mixer->am_RightPacketSamplePtr = alloc + chip_size;
         mixer->am_RightPacketVolumePtr = (UWORD*)(alloc + chip_size + mixer->am_PacketSize);
 
-        Aud_SetMixerVolume(mixer, 32768);
+        Aud_SetMixerVolume(mixer, 8192);
     }
     return mixer;
 }
@@ -160,10 +160,10 @@ extern void Aud_DumpMixer(
         "\tRight Sample Packet at %p\n"
         "\tRight Volume Packet at %p\n"
         "\tVolume Tables at %p\n"
-        "\tLines Processed  %u\n"
         "\tAbsMaxL %hu\n"
         "\tAbsMaxR %hu\n"
-
+        "\tShiftL %hu\n"
+        "\tShiftR %hu\n"
         "",
         mixer,
         mixer->am_SampleRateHz,
@@ -175,9 +175,11 @@ extern void Aud_DumpMixer(
         mixer->am_RightPacketSamplePtr,
         mixer->am_RightPacketVolumePtr,
         ((UBYTE*)mixer) + mixer->am_TableOffset,
-        mixer->am_LinesProcessed,
         mixer->am_AbsMaxL,
-        mixer->am_AbsMaxR
+        mixer->am_AbsMaxR,
+        mixer->am_ShiftL,
+        mixer->am_ShiftR
+
     );
 
     for (int channel = 0; channel < AUD_NUM_CHANNELS; ++channel) {

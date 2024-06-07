@@ -37,10 +37,13 @@ typedef struct {
     BYTE*  am_RightPacketSamplePtr; // contains am_PacketSize normalised 8-bit sample data for the right channel
     UWORD* am_RightPacketVolumePtr; // contains am_PacketSize/16 6-bit volume modulation data for the right channel
 
-    ULONG  am_LinesProcessed;
+    // Counters
     UWORD  am_AbsMaxL;
     UWORD  am_AbsMaxR;
+    UWORD  am_ShiftL;
+    UWORD  am_ShiftR;
 
+    // Config
     UWORD  am_SampleRateHz;
     UWORD  am_UpdateRateHz;
     UWORD  am_PacketSize;
