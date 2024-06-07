@@ -1,58 +1,8 @@
 
         mc68040
 
-        include "macros.i"
+        include "mixer_asm.i"
 
-; Size of a cache line in bytes
-CACHE_LINE_SIZE      EQU 16
-
-; Number volume steps
-AUD_8_TO_16_LEVELS  EQU 16
-
-; Number of channels
-AUD_NUM_CHANNELS    EQU 16
-
-    STRUCTURE Aud_ChanelState,0
-        APTR  ac_SamplePtr_l ; 4 Current address of the data
-        WORD  ac_SamplesLeft_w  ; 2 Remaining number of bytes
-        UBYTE ac_LeftVol_b   ; 1 Left volume (0-15)
-        UBYTE ac_RightVol_b  ; 1 Right volume (0-15)
-        STRUCT_SIZE Aud_ChanelState
-
-    STRUCTURE Aud_Mixer,0
-
-        STRUCT_ARRAY am_ChannelState,Aud_ChanelState,AUD_NUM_CHANNELS ; 8*16
-
-        ; Inline, cache aligned buffers
-
-        ; Contains the next cache line worth of incoming 8-bit sample data
-        BYTE_ARRAY am_FetchBuffer_vb,CACHE_LINE_SIZE
-
-        ; Contains the current cache line pair of the accumulated 16-bit sample data
-        ; for the left channel
-        WORD_ARRAY am_AccumL_vw,CACHE_LINE_SIZE
-
-        ; Contains the current cache line pair of the accumulated 16-bit sample data
-        ; for the right channel
-        WORD_ARRAY am_AccumR_vw,CACHE_LINE_SIZE
-
-        ; Pointers to the eventual destination buffers in CHIP ram
-        APTR am_LPacketSamplePtr_l ; contains normalised 8-bit sample data for the left channel
-        APTR am_LPacketVolumePtr_l ; contains 6-bit volume modulation data for the left channel
-        APTR am_RPacketSamplePtr_l ; contains normalised 8-bit sample data for the right channel
-        APTR am_RPacketVolumePtr_l ; contains 6-bit volume modulation data for the right channel
-
-        ULONG  am_LinesProcessed_l;
-        UWORD  am_AbsMaxL_w;
-        UWORD  am_AbsMaxR_w;
-
-        UWORD  am_SampleRateHz_w;
-        UWORD  am_UpdateRateHz_w;
-
-        UWORD  am_PacketSize_w;
-        UWORD  am_TableOffset_w;
-
-        STRUCT_SIZE Aud_Mixer
 
         section .text,code
         align 4
@@ -60,8 +10,14 @@ AUD_NUM_CHANNELS    EQU 16
         xdef _asm_sizeof_mixer;
         xdef _Aud_MixLine
 
+; Routine for mixing one cache line of samples per channel into the accumulation buffers. Handles update of the
+; Channel State, incrementing the sample pointer, decrementing the samples left counter and resetting the state
+; once the last line of samples have been fetched.
 ;
+; Once the mixing is complete, the left and right accumulation buffers are scanned for their largest absolute
+; values. This is necessary for the dynamics processing.
 ;
+; TODO reduce the register usage count and adjust order non-dependent instructions for better 060 performance
 ;
 ; a0 points at mixer
 
@@ -150,7 +106,7 @@ Aud_MixLine:
         sub.w   #CACHE_LINE_SIZE,ac_SamplesLeft_w(a1)
         bne.s   .inc_sample_ptr
 
-        ; zero out the remaining channel state
+        ; Zero out the remaining channel state if we exhausted it
         clr.l   ac_SamplePtr_l(a1)
         clr.w   ac_LeftVol_b(a1)
         bra.s   .done_channel
@@ -185,7 +141,6 @@ Aud_MixLine:
         neg.w   d0
 
 .not_negative:
-        ; d2 is tracking the maximum
         cmp.w   d0,d2
         bge.s   .not_bigger
 
@@ -197,7 +152,7 @@ Aud_MixLine:
         swap    d2
         dbra    d3,.next_buffer
 
-        ; write both back at once
+        ; Write both back at once
         move.l  d2,am_AbsMaxL_w(a0)
 
 .finished:
