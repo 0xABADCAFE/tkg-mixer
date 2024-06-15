@@ -53,10 +53,10 @@ Aud_MixLine:
         beq.s   .done_channel
 
         ; Get the left/right volume pair, each of which should be 0-15, with 0 being a silence skip
-        move.w   ac_LeftVol_b(a1),d5
+        move.w  ac_LeftVol_b(a1),d5
 
         ; Enforce the range 0-15 for each channel
-        and.w    #$0F0F,d5
+        and.w   #$0F0F,d5
 
         ; If both are zero, just update the channel state and move along
         beq.s   .update_channel
@@ -123,15 +123,14 @@ Aud_MixLine:
 
         dbra    d2,.next_channel
 
-        ; Now we need to find the maximum sbsolute value of each accumulation buffer
+        ; Now we need to find the maximum absolute value of each accumulation buffer
         lea     am_AccumL_vw(a0),a4
         lea     am_AbsMaxL_w(a0),a2
 
-
-        ; Same two step trick as before, we process left then right consecutively
+        ; Same two-step trick as before, we process left then right consecutively
         moveq  #1,d3
-
         moveq  #9,d4
+
 .next_buffer:
         clr.w   d0 ; d0 will contain the next absolute value from the buffer
         clr.l   d2
@@ -152,11 +151,11 @@ Aud_MixLine:
 .not_bigger:
         dbra    d1,.next_buffer_value
 
-        ; peak value (15 bit)
+        ; peak value (15 bit) - we don't really need to store this but it's just for checking
         move.w  d2,(a2)+
 
         ; Now determine the normalisation factor. This is just the 15-bit absolute peak >> 9
-        ; which gives us our offset into the table
+        ; which gives us our offset into the _Aud_NormFactors_vw table
         lsr.w   d4,d2
         move.w  d2,2(a2)
 
@@ -167,6 +166,12 @@ Aud_MixLine:
         movem.l (sp)+,d2/d3/d4/d5/a2/a3/a4
         rts
 
+Aud_Normalise_mul:
+
+        rts
+
+Aud_Normalise_shift:
+        rts
 
 _asm_sizeof_mixer::
         dc.w Aud_Mixer_SizeOf_l
