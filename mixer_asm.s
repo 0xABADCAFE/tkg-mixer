@@ -10,6 +10,8 @@
         xdef _asm_sizeof_mixer;
         xdef _Aud_MixLine
 
+        xref _Aud_NormFactors_vw;
+
 ; Routine for mixing one cache line of samples per channel into the accumulation buffers. Handles update of the
 ; Channel State, incrementing the sample pointer, decrementing the samples left counter and resetting the state
 ; once the last line of samples have been fetched.
@@ -117,7 +119,7 @@ Aud_MixLine:
         add.l   #CACHE_LINE_SIZE,ac_SamplePtr_l(a1)
 
 .done_channel:
-        lea  Aud_ChanelState_SizeOf_l(a1),a1
+        lea     Aud_ChanelState_SizeOf_l(a1),a1
 
         dbra    d2,.next_channel
 
@@ -129,6 +131,7 @@ Aud_MixLine:
         ; Same two step trick as before, we process left then right consecutively
         moveq  #1,d3
 
+        moveq  #9,d4
 .next_buffer:
         clr.w   d0 ; d0 will contain the next absolute value from the buffer
         clr.l   d2
@@ -149,25 +152,13 @@ Aud_MixLine:
 .not_bigger:
         dbra    d1,.next_buffer_value
 
+        ; peak value (15 bit)
         move.w  d2,(a2)+
 
-        ; Now determine the normalisation factor
-        clr.l   d0
-
-        ; roll the most significant 6 bits (sign bit never set) into the low
-        rol.w   #7,d2
-
-        moveq   #5,d1
-
-.next_power:
-        btst    d1,d2
-        bne.s   .found_power
-
-        addq.w  #1,d0
-        dbra    d1,.next_power
-
-.found_power:
-        move.w  d0,2(a2)
+        ; Now determine the normalisation factor. This is just the 15-bit absolute peak >> 9
+        ; which gives us our offset into the table
+        lsr.w   d4,d2
+        move.w  d2,2(a2)
 
         dbra    d3,.next_buffer
 

@@ -5,6 +5,50 @@
 
 #define CACHE_ALIGN_MASK (CACHE_LINE_SIZE - 1)
 
+/**
+ * These are the normalisation factors to use where fast multiplication is available, as 6.8 fixed point. The index
+ * of the table is the AUDxVOL-1 of value volume level we are normalising for.
+ *
+ * Each value is equivalent to (int)(256.0 * 64.0/(index + 1)).
+ *
+ * As a worked example, suppose a sample packet contains the largest absolute value 1535. We convert the sample to an
+ * index using >> 9 which gives us 2. This is 1 less than the AUDxVOL value we will be replaying the normalised 8-bit
+ * sample data at.
+ *
+ * Equally, the value of corresponding index in this table is the value we will multiply all of the samples by in this
+ * packet as a 16x16 => 32. Thus, the largest value we will have is 1535 * 5461 = 8382635.
+ *
+ * The normalised 8 bit value we need is obtained by performing >> 16 on this product, which is just a swap operation
+ * in assembler. So, 8382635/65536 = 127.9, which gives 127.
+ *
+ * Where index + 1 is a perfect power of 2, we instead have a right shift value that will scale a 16-bit value directly
+ * to the target range. For example, for a normalisation target of 64 (full volume), right shifting a 16-bit sample
+ * by 8 immediately gives you the corresponding 8-bit output.
+ *
+ * We can easily tell if our index represents a perfect power of 2 by doing (index + 1) & index. If the result is zero
+ * then the value at that index needs to be used as a shift, otherwise a multiply.
+ */
+WORD Aud_NormFactors_vw[64] __attribute__ ((aligned (CACHE_LINE_SIZE)));
+
+WORD Aud_NormFactors_vw[64] = {
+       2,    3, 5461,    4,
+    3276, 2730, 2340,    5,
+    1820, 1638, 1489, 1365,
+    1260, 1170, 1092,    6,
+     963,  910,  862,  819,
+     780,  744,  712,  682,
+     655,  630,  606,  585,
+     564,  546,  528,    7,
+     496,  481,  468,  455,
+     442,  431,  420,  409,
+     399,  390,  381,  372,
+     364,  356,  348,  341,
+     334,  327,  321,  315,
+     309,  303,  297,  292,
+     287,  282,  277,  273,
+     268,  264,  260,    8
+};
+
 static inline ULONG CacheAlign(ULONG size)
 {
     return (size + CACHE_ALIGN_MASK) & ~CACHE_ALIGN_MASK;
@@ -160,10 +204,9 @@ extern void Aud_DumpMixer(
         "\tRight Sample Packet at %p\n"
         "\tRight Volume Packet at %p\n"
         "\tVolume Tables at %p\n"
-        "\tAbsMaxL %hu\n"
-        "\tAbsMaxR %hu\n"
-        "\tShiftL %hu\n"
-        "\tShiftR %hu\n"
+        "\tAbsMaxL %hu [Norm Index %hu]\n"
+        "\tAbsMaxR %hu [Norm Index %hu]\n"
+        "\tNorm Table at %p\n"
         "",
         mixer,
         mixer->am_SampleRateHz,
@@ -176,10 +219,10 @@ extern void Aud_DumpMixer(
         mixer->am_RightPacketVolumePtr,
         ((UBYTE*)mixer) + mixer->am_TableOffset,
         mixer->am_AbsMaxL,
+        mixer->am_IndexL,
         mixer->am_AbsMaxR,
-        mixer->am_ShiftL,
-        mixer->am_ShiftR
-
+        mixer->am_IndexR,
+        Aud_NormFactors_vw
     );
 
     for (int channel = 0; channel < AUD_NUM_CHANNELS; ++channel) {

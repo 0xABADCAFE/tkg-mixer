@@ -40,8 +40,8 @@ typedef struct {
     // Counters
     UWORD  am_AbsMaxL;
     UWORD  am_AbsMaxR;
-    UWORD  am_ShiftL;
-    UWORD  am_ShiftR;
+    UWORD  am_IndexL;
+    UWORD  am_IndexR;
 
     // Config
     UWORD  am_SampleRateHz;
