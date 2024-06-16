@@ -198,46 +198,58 @@ Aud_MixLine:
         move.w  d0,(a1)+               ; write volume value
         move.l  a1,4(a4)               ; write updated volume pointer
 
+        moveq   #(CACHE_LINE_SIZE/4)-1,d4 ; we are converting 4 samples per loop
+
+        move.l (a4),a1                    ; destination ptr in a1
+
         ; Check for a perfoect power of 2..
         and.w   d1,d0                  ; (i + 1) & i
-        beq     .shift_normalise
-
-.mul_normalise:
-        move.l (a4),a1
-
-        moveq   #3,d4
+        beq     .shift_norm_four  ;
 
 .mul_norm_four:
-        ; something like this. We assume short muls on 060
-        move.w  (a2)+,d0
-        muls.w  d2,d0
-        swap    d0
-        move.b  d0,d1
-        lsl.l   #8,d1
+        ; something like this, for 060
+        move.w  (a2)+,d0    ; xx:xx:AA:aa
+        muls.w  d2,d0       ; 00:AA:xx:xx
+        lsr.l   #8,d0       ; 00:00:AA:xx
+        move.w  d0,d1       ; xx:xx:AA:xx
 
-        move.w  (a2)+,d0
-        muls.w  d2,d0
-        swap    d0
-        move.b  d0,d1
-        lsl.l   #8,d1
+        move.w  (a2)+,d0    ; xx:xx:BB:bb
+        muls.w  d2,d0       ; xx:BB:xx:xx
+        swap    d0          ; xx:xx:xx:BB
+        move.b  d0,d1       ; xx:xx:AA:BB
+        lsl.l   #8,d1       ; xx:AA:BB:00
 
-        move.w  (a2)+,d0
-        muls.w  d2,d0
-        swap    d0
-        move.b  d0,d1
-        lsl.l   #8,d1
+        move.w  (a2)+,d0    ; xx:xx:CC:cc
+        muls.w  d2,d0       ; xx:CC:xx:xx
+        swap    d0          ; xx:xx:xx:CC
+        move.b  d0,d1       ; xx:AA:BB:CC
+        lsl.l   #8,d1       ; AA:BB:CC:00
 
-        move.w  (a2)+,d0
-        muls.w  d2,d0
-        swap    d0
-        move.b  d0,d1
-        move.l  d1,(a1)+ ; long slow chip write here
+        move.w  (a2)+,d0    ; xx:xx:DD:dd
+        muls.w  d2,d0       ; xx:DD:xx:xx
+        swap    d0          ; xx:xx:xx:DD
+        move.b  d0,d1       ; AA:BB:CC:DD
+
+        move.l  d1,(a1)+    ; long slow chip write here
 
         dbra    d4,.mul_norm_four
-
         move.l a1,(a4)
 
-.shift_normalise:
+        bra.s   .done_channel_normalise
+
+.shift_norm_four:
+        move.l  (a2)+,d0 ; AA:aa:BB:bb
+        lsr.l   d2,d0    ; 00:AA:xx:BB
+        move.l  (a2)+,d1 ; CC:cc:DD:dd
+        lsl.w   #8,d0    ; 00:AA:BB:00
+        lsr.l   d2,d1    ; xx:CC:xx:DD
+        lsl.l   #8,d0    ; AA:BB:00:00
+        lsl.w   #8,d1    ; xx:CC:DD:00
+        lsr.l   #8,d1    ; 00:xx:CC:DD
+        move.w  d1,d0    ; AA:BB:CC:DD
+
+        move.l  d0,(a1)+ ; long slow chip write
+        dbra    d4,.shift_norm_four
 
 .done_channel_normalise:
         lea     2(a3),a3              ; next index
