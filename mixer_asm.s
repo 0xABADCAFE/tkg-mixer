@@ -27,6 +27,9 @@ _Aud_MixLine::
 Aud_MixLine:
         movem.l d2/d3/d4/d5/a2/a3/a4,-(sp)
 
+;
+; Initialisation - clear out the accumulation buffers
+;
 .clear_accum_buffers:
         move.w  #CACHE_LINE_SIZE-1,d2
         lea     am_AccumL_vw(a0),a1
@@ -35,6 +38,11 @@ Aud_MixLine:
         clr.l   (a1)+
         dbra    d2,.clear_loop
 
+;
+; Mixing - Iterate the channel state list. For each channel that has an active pointer and samples remaining,
+;          transfer a packet to the fetch buffer. For 040 and 060 this is done using move16, so that we arent
+;          slowly churning out all the datacache.
+;
         ; Fixed number of channels to mix in d2
         moveq   #AUD_NUM_CHANNELS-1,d2
 
@@ -61,7 +69,7 @@ Aud_MixLine:
         ; If both are zero, just update the channel state and move along
         beq.s   .update_channel
 
-.not_silent:
+.channel_not_silent:
         ; swap the bytes in d5 to get the left voume in the lower byte first. Endian fail, lol.
         rol.w   #8,d5
 
@@ -75,6 +83,10 @@ Aud_MixLine:
         moveq   #1,d3
         lea     am_AccumL_vw(a0),a4 ; note that the right accumulator immediately follows
         clr.l   d0
+
+;
+; Accumulation - For each 8-bit sample in the fetch buffer, look up the 16-bit value in the volume table and
+;                add to the values in the accumulation buffer
 
 .mix_samples:
         move.b  d5,d0   ; d0 = 0-15, 0 silence, 1-14 are volume table selectors
@@ -123,6 +135,10 @@ Aud_MixLine:
 
         dbra    d2,.next_channel
 
+;
+; Peak Level Analysis - Find the peak level of the left and right accumulation buffers so that we can normalise
+;                       each one and convert to 8-bit data with a corresponding chanenel volume attenuation.
+;
         ; Now we need to find the maximum absolute value of each accumulation buffer
         lea     am_AccumL_vw(a0),a4
         lea     am_AbsMaxL_w(a0),a2
@@ -161,11 +177,79 @@ Aud_MixLine:
 
         dbra    d3,.next_buffer
 
+; Normalisation - For each 16-bit value in the accumulation buffer, scale by the normalisation value and then
+;                 convert to 8 bit.
+
+        ; Same two-step trick as before, we process left then right consecutively
+        moveq  #1,d3
+
+        lea     am_AccumL_vw(a0),a2
+        lea     am_IndexL_w(a0),a3
+        lea     am_LPacketSamplePtr_l(a0),a4
+
+.normalize_next:
+        ; get the table index into d1. If the index is on less than a power of 2, we will be using a shift method
+        moveq   #1,d0
+        move.w  (a3),d1                ; Index that we calculated in the analysis step
+        lea     _Aud_NormFactors_vw,a1
+        move.w  (a1,d1.w),d2           ; d2 contains normalisation factor
+        move.l  4(a4),a1               ; volume packet pointer in a1
+        add.w   d1,d0                  ; i + 1
+        move.w  d0,(a1)+               ; write volume value
+        move.l  a1,4(a4)               ; write updated volume pointer
+
+        ; Check for a perfoect power of 2..
+        and.w   d1,d0                  ; (i + 1) & i
+        beq     .shift_normalise
+
+.mul_normalise:
+        move.l (a4),a1
+
+        moveq   #3,d4
+
+.mul_norm_four:
+        ; something like this. We assume short muls on 060
+        move.w  (a2)+,d0
+        muls.w  d2,d0
+        swap    d0
+        move.b  d0,d1
+        lsl.l   #8,d1
+
+        move.w  (a2)+,d0
+        muls.w  d2,d0
+        swap    d0
+        move.b  d0,d1
+        lsl.l   #8,d1
+
+        move.w  (a2)+,d0
+        muls.w  d2,d0
+        swap    d0
+        move.b  d0,d1
+        lsl.l   #8,d1
+
+        move.w  (a2)+,d0
+        muls.w  d2,d0
+        swap    d0
+        move.b  d0,d1
+        move.l  d1,(a1)+ ; long slow chip write here
+
+        dbra    d4,.mul_norm_four
+
+        move.l a1,(a4)
+
+.shift_normalise:
+
+.done_channel_normalise:
+        lea     2(a3),a3              ; next index
+        lea     8(a4),a4              ; next buffer pair
+
+        dbra    d3,.normalize_next
 
 .finished:
         movem.l (sp)+,d2/d3/d4/d5/a2/a3/a4
         rts
 
+; mixer in a0
 Aud_Normalise_mul:
 
         rts

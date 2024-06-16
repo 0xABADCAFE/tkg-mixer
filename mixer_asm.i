@@ -45,6 +45,7 @@ AUD_NUM_CHANNELS    EQU 16
         UWORD  am_IndexL_w;
         UWORD  am_IndexR_w;
 
+        APTR   am_ChipBufferPtr_l ; contains base address of the CHIP ram buffers
         UWORD  am_SampleRateHz_w;
         UWORD  am_UpdateRateHz_w;
 

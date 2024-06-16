@@ -31,7 +31,7 @@ typedef struct {
     WORD am_AccumL[CACHE_LINE_SIZE];
     WORD am_AccumR[CACHE_LINE_SIZE];
 
-    // Chip RAM Buffers
+    // Chip RAM Buffer Pointers
     BYTE*  am_LeftPacketSamplePtr;  // contains am_PacketSize normalised 8-bit sample data for the left channel
     UWORD* am_LeftPacketVolumePtr;  // contains am_PacketSize/16 6-bit volume modulation data for the left channel
     BYTE*  am_RightPacketSamplePtr; // contains am_PacketSize normalised 8-bit sample data for the right channel
@@ -44,6 +44,7 @@ typedef struct {
     UWORD  am_IndexR;
 
     // Config
+    UBYTE* am_ChipBufferPtr;
     UWORD  am_SampleRateHz;
     UWORD  am_UpdateRateHz;
     UWORD  am_PacketSize;
@@ -70,6 +71,10 @@ extern void Aud_MixLine(
 );
 
 extern void Aud_DumpMixer(
+    REG(a0, Aud_Mixer* mixer)
+);
+
+extern void Aud_ResetBuffers(
     REG(a0, Aud_Mixer* mixer)
 );
 

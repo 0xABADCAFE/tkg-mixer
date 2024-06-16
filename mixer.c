@@ -133,21 +133,15 @@ Aud_Mixer *Aud_CreateMixer(
         mixer->am_TableOffset  = context_size;
 
         // Allocate a single chip ram block that is big enough to hold all the bits
-        size_t chip_size = (mixer->am_PacketSize + mixer->am_PacketSize >> 2);
+        size_t chip_size = mixer->am_PacketSize + (mixer->am_PacketSize >> 2);
 
-        BYTE* alloc = AllocCacheAligned(chip_size << 1, MEMF_CHIP); // MEMF_CHIP
+        mixer->am_ChipBufferPtr = (UBYTE*)AllocCacheAligned(chip_size << 1, MEMF_CHIP); // MEMF_CHIP
 
-        if (!alloc) {
+        if (!mixer->am_ChipBufferPtr) {
             Aud_FreeMixer(mixer);
             return NULL;
         }
-
-        mixer->am_LeftPacketSamplePtr = alloc;
-        mixer->am_LeftPacketVolumePtr = (UWORD*)(alloc + mixer->am_PacketSize);
-
-        mixer->am_RightPacketSamplePtr = alloc + chip_size;
-        mixer->am_RightPacketVolumePtr = (UWORD*)(alloc + chip_size + mixer->am_PacketSize);
-
+        Aud_ResetBuffers(mixer);
         Aud_SetMixerVolume(mixer, 8192);
     }
     return mixer;
@@ -156,10 +150,20 @@ Aud_Mixer *Aud_CreateMixer(
 void Aud_FreeMixer(REG(a0, Aud_Mixer* mixer))
 {
     if (mixer && mixer->am_LeftPacketSamplePtr) {
-        FreeCacheAligned(mixer->am_LeftPacketSamplePtr);
+        FreeCacheAligned(mixer->am_ChipBufferPtr);
     }
     FreeCacheAligned(mixer);
 }
+
+void Aud_ResetBuffers(REG(a0, Aud_Mixer* mixer))
+{
+    size_t chip_size = mixer->am_PacketSize + (mixer->am_PacketSize >> 2);
+    mixer->am_LeftPacketSamplePtr = (BYTE*)mixer->am_ChipBufferPtr;
+    mixer->am_LeftPacketVolumePtr = (UWORD*)(mixer->am_ChipBufferPtr + mixer->am_PacketSize);
+    mixer->am_RightPacketSamplePtr = (BYTE*)(mixer->am_ChipBufferPtr + chip_size);
+    mixer->am_RightPacketVolumePtr = (UWORD*)(mixer->am_ChipBufferPtr + chip_size + mixer->am_PacketSize);
+}
+
 
 void Aud_SetMixerVolume(
     REG(a0, Aud_Mixer* mixer),
