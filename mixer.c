@@ -130,7 +130,7 @@ Aud_Mixer *Aud_CreateMixer(
         // Allocate a single chip ram block that is big enough to hold all the bits
         size_t chip_size = mixer->am_PacketSize + (mixer->am_PacketSize >> 2);
 
-        mixer->am_ChipBufferPtr = (UBYTE*)AllocCacheAligned(chip_size << 1, MEMF_FAST); // MEMF_CHIP
+        mixer->am_ChipBufferPtr = (UBYTE*)AllocCacheAligned(chip_size << 1, MEMF_CHIP); // MEMF_CHIP
 
         if (!mixer->am_ChipBufferPtr) {
             Aud_FreeMixer(mixer);

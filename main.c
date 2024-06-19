@@ -76,6 +76,7 @@ int main(void) {
         return 10;
     }
 
+
     if (sizeof(Aud_Mixer) != asm_sizeof_mixer) {
         printf(
             "Unexpected structure size difference, C: %zu, asm: %zu\n",
@@ -85,9 +86,11 @@ int main(void) {
         return 20;
     }
 
+
     Aud_Mixer* mixer = Aud_CreateMixer(16000, 50);
 
     if (mixer) {
+        TimerBase = get_timer();
 
         // Just have a few sounds to play
         Sound sound[3] = {};
@@ -119,9 +122,15 @@ int main(void) {
         FILE* lvol_out  = fopen("lvol_out.raw", "wb");
         FILE* rvol_out  = fopen("rvol_out.raw", "wb");
 
+        ULONG ticks;
+        ULONG packets = 0;
         while (mixer->am_ChannelState[3].ac_SamplesLeft > 0) {
 
+            ReadEClock(&clk_begin.ecv);
             Aud_MixPacket(mixer);
+            ReadEClock(&clk_end.ecv);
+            ++packets;
+            ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);
 
             fwrite(mixer->am_LeftPacketSampleBasePtr, 1, mixer->am_PacketSize, lchan_out);
             fwrite(mixer->am_RightPacketSampleBasePtr, 1, mixer->am_PacketSize, rchan_out);
@@ -141,6 +150,9 @@ int main(void) {
         FreeCacheAligned(sound[1].s_dataPtr);
         FreeCacheAligned(sound[2].s_dataPtr);
 
+        printf("Mixed %lu Packets in %lu EClockVal ticks (%lu/s)\n", packets, ticks, clock_freq_hz);
+
+        free_timer();
         Aud_FreeMixer(mixer);
     }
 
