@@ -6,6 +6,7 @@
 
 // CPU cache line size
 #define CACHE_LINE_SIZE 16
+#define CACHE_ALIGN_MASK (CACHE_LINE_SIZE - 1)
 
 // Number of levels when converting 8 bit to 16 for a given volume level
 #define AUD_8_TO_16_LEVELS 16
@@ -27,11 +28,14 @@ typedef struct {
 typedef struct {
     Aud_ChannelState am_ChannelState[AUD_NUM_CHANNELS];
 
+    // The am_FetchBuffer contains the set of 8-bit samples just fetched for the current channel
     BYTE am_FetchBuffer[CACHE_LINE_SIZE];
+
+    // The am_AccumL/am_AccumR buffers contain the current 16-bit mixed data
     WORD am_AccumL[CACHE_LINE_SIZE];
     WORD am_AccumR[CACHE_LINE_SIZE];
 
-    // Chip RAM Buffer Pointers
+    // Chip RAM Buffer Pointers (working)
     BYTE*  am_LeftPacketSamplePtr;  // contains am_PacketSize normalised 8-bit sample data for the left channel
     UWORD* am_LeftPacketVolumePtr;  // contains am_PacketSize/16 6-bit volume modulation data for the left channel
     BYTE*  am_RightPacketSamplePtr; // contains am_PacketSize normalised 8-bit sample data for the right channel
@@ -44,7 +48,13 @@ typedef struct {
     UWORD  am_IndexR;
 
     // Config
+    BYTE*  am_LeftPacketSampleBasePtr;  // contains am_PacketSize normalised 8-bit sample data for the left channel
+    UWORD* am_LeftPacketVolumeBasePtr;  // contains am_PacketSize/16 6-bit volume modulation data for the left channel
+    BYTE*  am_RightPacketSampleBasePtr; // contains am_PacketSize normalised 8-bit sample data for the right channel
+    UWORD* am_RightPacketVolumeBasePtr; // contains am_PacketSize/16 6-bit volume modulation data for the right
+
     UBYTE* am_ChipBufferPtr;
+
     UWORD  am_SampleRateHz;
     UWORD  am_UpdateRateHz;
     UWORD  am_PacketSize;
@@ -60,13 +70,12 @@ extern void Aud_FreeMixer(
     REG(a0, Aud_Mixer* mixer)
 );
 
-
 extern void Aud_SetMixerVolume(
     REG(a0, Aud_Mixer* mixer),
     REG(d0, UWORD volume)
 );
 
-extern void Aud_MixLine(
+extern void Aud_MixPacket(
     REG(a0, Aud_Mixer* mixer)
 );
 
@@ -78,7 +87,13 @@ extern void Aud_ResetBuffers(
     REG(a0, Aud_Mixer* mixer)
 );
 
+
 extern void* AllocCacheAligned(REG(d0, ULONG size), REG(d1, ULONG flags));
 extern void FreeCacheAligned(REG(a0, void* address));
+
+static inline ULONG CacheAlign(ULONG size)
+{
+    return (size + CACHE_ALIGN_MASK) & ~CACHE_ALIGN_MASK;
+}
 
 #endif

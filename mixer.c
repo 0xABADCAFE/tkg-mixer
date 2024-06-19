@@ -3,7 +3,6 @@
 #include <proto/exec.h>
 
 
-#define CACHE_ALIGN_MASK (CACHE_LINE_SIZE - 1)
 
 /**
  * These are the normalisation factors to use where fast multiplication is available, as 6.8 fixed point. The index
@@ -49,10 +48,6 @@ WORD Aud_NormFactors_vw[64] = {
      268,  264,  260,    8
 };
 
-static inline ULONG CacheAlign(ULONG size)
-{
-    return (size + CACHE_ALIGN_MASK) & ~CACHE_ALIGN_MASK;
-}
 
 /**
  * Utility function for allocating a block of cache aligned memory.
@@ -135,14 +130,14 @@ Aud_Mixer *Aud_CreateMixer(
         // Allocate a single chip ram block that is big enough to hold all the bits
         size_t chip_size = mixer->am_PacketSize + (mixer->am_PacketSize >> 2);
 
-        mixer->am_ChipBufferPtr = (UBYTE*)AllocCacheAligned(chip_size << 1, MEMF_CHIP); // MEMF_CHIP
+        mixer->am_ChipBufferPtr = (UBYTE*)AllocCacheAligned(chip_size << 1, MEMF_FAST); // MEMF_CHIP
 
         if (!mixer->am_ChipBufferPtr) {
             Aud_FreeMixer(mixer);
             return NULL;
         }
         Aud_ResetBuffers(mixer);
-        Aud_SetMixerVolume(mixer, 8192);
+        Aud_SetMixerVolume(mixer, 16384);
     }
     return mixer;
 }
@@ -158,10 +153,17 @@ void Aud_FreeMixer(REG(a0, Aud_Mixer* mixer))
 void Aud_ResetBuffers(REG(a0, Aud_Mixer* mixer))
 {
     size_t chip_size = mixer->am_PacketSize + (mixer->am_PacketSize >> 2);
-    mixer->am_LeftPacketSamplePtr = (BYTE*)mixer->am_ChipBufferPtr;
-    mixer->am_LeftPacketVolumePtr = (UWORD*)(mixer->am_ChipBufferPtr + mixer->am_PacketSize);
-    mixer->am_RightPacketSamplePtr = (BYTE*)(mixer->am_ChipBufferPtr + chip_size);
-    mixer->am_RightPacketVolumePtr = (UWORD*)(mixer->am_ChipBufferPtr + chip_size + mixer->am_PacketSize);
+    mixer->am_LeftPacketSamplePtr =
+    mixer->am_LeftPacketSampleBasePtr = (BYTE*)mixer->am_ChipBufferPtr;
+
+    mixer->am_LeftPacketVolumePtr =
+    mixer->am_LeftPacketVolumeBasePtr = (UWORD*)(mixer->am_ChipBufferPtr + mixer->am_PacketSize);
+
+    mixer->am_RightPacketSamplePtr =
+    mixer->am_RightPacketSampleBasePtr = (BYTE*)(mixer->am_ChipBufferPtr + chip_size);
+
+    mixer->am_RightPacketVolumePtr =
+    mixer->am_RightPacketVolumeBasePtr = (UWORD*)(mixer->am_ChipBufferPtr + chip_size + mixer->am_PacketSize);
 }
 
 

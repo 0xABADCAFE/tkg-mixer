@@ -45,6 +45,12 @@ AUD_NUM_CHANNELS    EQU 16
         UWORD  am_IndexL_w;
         UWORD  am_IndexR_w;
 
+        ; Pointers to the eventual destination buffers in CHIP ram
+        APTR am_LPacketSampleBasePtr_l ; contains normalised 8-bit sample data for the left channel
+        APTR am_LPacketVolumeBasePtr_l ; contains 6-bit volume modulation data for the left channel
+        APTR am_RPacketSampleBasePtr_l ; contains normalised 8-bit sample data for the right channel
+        APTR am_RPacketVolumeBasePtr_l ; contains 6-bit volume modulation data for the right channel
+
         APTR   am_ChipBufferPtr_l ; contains base address of the CHIP ram buffers
         UWORD  am_SampleRateHz_w;
         UWORD  am_UpdateRateHz_w;

@@ -8,7 +8,7 @@
         align 4
 
         xdef _asm_sizeof_mixer;
-        xdef _Aud_MixLine
+        xdef _Aud_MixPacket
 
         xref _Aud_NormFactors_vw;
 
@@ -19,13 +19,35 @@
 ; Once the mixing is complete, the left and right accumulation buffers are scanned for their largest absolute
 ; values. This is necessary for the dynamics processing.
 ;
-; TODO reduce the register usage count and adjust order non-dependent instructions for better 060 performance
+; TODO:
 ;
+;   68060 Version: Uses multiplication for sample volume (rather than table)
+;   68040 Version: Uses table for sample volume and shift normalisation by default. Option for multiplication.
+
 ; a0 points at mixer
 
-_Aud_MixLine::
-Aud_MixLine:
-        movem.l d2/d3/d4/d5/a2/a3/a4,-(sp)
+_Aud_MixPacket::
+Aud_MixPacket:
+        movem.l d2-d6/a2-a4,-(sp)
+
+        ; Number of lines to mix in d6
+        move.w  am_PacketSize_w(a0),d6
+        lsr.w   #4,d6
+        subq.w  #1,d6
+
+        ; Reset the working pointers
+        lea     am_LPacketSamplePtr_l(a0),a1
+        lea     am_LPacketSampleBasePtr_l(a0),a2
+        move.l  (a2)+,(a1)+
+        move.l  (a2)+,(a1)+
+        move.l  (a2)+,(a1)+
+        move.l  (a2)+,(a1)+
+
+.mix_next_line:
+        clr.l   am_FetchBuffer_vb(a0)
+        clr.l   am_FetchBuffer_vb+4(a0)
+        clr.l   am_FetchBuffer_vb+8(a0)
+        clr.l   am_FetchBuffer_vb+12(a0)
 
 ;
 ; Initialisation - clear out the accumulation buffers
@@ -135,7 +157,7 @@ Aud_MixLine:
 
         dbra    d2,.next_channel
 
-;
+
 ; Peak Level Analysis - Find the peak level of the left and right accumulation buffers so that we can normalise
 ;                       each one and convert to 8-bit data with a corresponding chanenel volume attenuation.
 ;
@@ -145,6 +167,8 @@ Aud_MixLine:
 
         ; Same two-step trick as before, we process left then right consecutively
         moveq  #1,d3
+
+        ; Peak value / 512 gives us our normalisation index
         moveq  #9,d4
 
 .next_buffer:
@@ -192,11 +216,13 @@ Aud_MixLine:
         moveq   #1,d0
         move.w  (a3),d1                ; Index that we calculated in the analysis step
         lea     _Aud_NormFactors_vw,a1
-        move.w  (a1,d1.w),d2           ; d2 contains normalisation factor
+        move.w  (a1,d1.w*2),d2         ; d2 contains normalisation factor
+
         move.l  4(a4),a1               ; volume packet pointer in a1
         add.w   d1,d0                  ; i + 1
         move.w  d0,(a1)+               ; write volume value
-        move.l  a1,4(a4)               ; write updated volume pointer
+
+        move.l  a1,4(a4)               ; updated working volume pointer
 
         moveq   #(CACHE_LINE_SIZE/4)-1,d4 ; we are converting 4 samples per loop
 
@@ -233,11 +259,21 @@ Aud_MixLine:
         move.l  d1,(a1)+    ; long slow chip write here
 
         dbra    d4,.mul_norm_four
-        move.l a1,(a4)
+
+        move.l  a1,(a4)     ; update working destination pointer
 
         bra.s   .done_channel_normalise
 
 .shift_norm_four:
+; Reference
+;        REPT    4
+;        move.w  (a2)+,d0
+;        asr.w   d2,d0
+;        move.b  d0,(a1)+
+;        ENDR
+
+        ; process samples in pairs
+
         move.l  (a2)+,d0 ; AA:aa:BB:bb
         lsr.l   d2,d0    ; 00:AA:xx:BB
         move.l  (a2)+,d1 ; CC:cc:DD:dd
@@ -247,9 +283,11 @@ Aud_MixLine:
         lsl.w   #8,d1    ; xx:CC:DD:00
         lsr.l   #8,d1    ; 00:xx:CC:DD
         move.w  d1,d0    ; AA:BB:CC:DD
-
         move.l  d0,(a1)+ ; long slow chip write
+
         dbra    d4,.shift_norm_four
+
+        move.l  a1,(a4)     ; update working destination pointer
 
 .done_channel_normalise:
         lea     2(a3),a3              ; next index
@@ -257,17 +295,12 @@ Aud_MixLine:
 
         dbra    d3,.normalize_next
 
+        dbra    d6,.mix_next_line
+
 .finished:
-        movem.l (sp)+,d2/d3/d4/d5/a2/a3/a4
+        movem.l (sp)+,d2-d6/a2-a4
         rts
 
-; mixer in a0
-Aud_Normalise_mul:
-
-        rts
-
-Aud_Normalise_shift:
-        rts
 
 _asm_sizeof_mixer::
         dc.w Aud_Mixer_SizeOf_l
