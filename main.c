@@ -92,27 +92,24 @@ int main(void) {
     if (mixer) {
         TimerBase = get_timer();
 
-        // Just have a few sounds to play
-        Sound sound[3] = {};
+        Sound sound;
+        Sound inverse;
 
-        load_sample("sounds/Teleport.raw", &sound[0]);
-        load_sample("sounds/RumbleWind.raw", &sound[1]);
-        load_sample("sounds/Collect_weapon.raw", &sound[2]);
+        load_sample("sounds/airstrike.raw", &sound);
 
-        mixer->am_ChannelState[2].ac_SamplePtr   = sound[0].s_dataPtr;
-        mixer->am_ChannelState[2].ac_SamplesLeft = sound[0].s_length;
-        mixer->am_ChannelState[2].ac_LeftVolume  = 15;
-        mixer->am_ChannelState[2].ac_RightVolume = 5;
+        inverse.s_dataPtr = AllocCacheAligned(sound.s_length, MEMF_FAST);
+        for (int s = 0; s < sound.s_length; ++s) {
+            inverse.s_dataPtr[s] = - sound.s_dataPtr[s];
+        }
 
-        mixer->am_ChannelState[3].ac_SamplePtr   = sound[1].s_dataPtr;
-        mixer->am_ChannelState[3].ac_SamplesLeft = sound[1].s_length;
-        mixer->am_ChannelState[3].ac_LeftVolume  = 1;
-        mixer->am_ChannelState[3].ac_RightVolume = 1;
-
-        mixer->am_ChannelState[5].ac_SamplePtr   = sound[2].s_dataPtr;
-        mixer->am_ChannelState[5].ac_SamplesLeft = sound[2].s_length;
-        mixer->am_ChannelState[5].ac_LeftVolume  = 0;
-        mixer->am_ChannelState[5].ac_RightVolume = 8;
+        for (int chan = 0; chan < AUD_NUM_CHANNELS; ++chan) {
+            mixer->am_ChannelState[chan].ac_SamplePtr   = (
+                (chan & 1) ? sound.s_dataPtr : inverse.s_dataPtr
+            ) + (chan << 5);
+            mixer->am_ChannelState[chan].ac_SamplesLeft = sound.s_length - (chan << 5);
+            mixer->am_ChannelState[chan].ac_LeftVolume  = chan;
+            mixer->am_ChannelState[chan].ac_RightVolume = 15 - chan;
+        }
 
         Aud_DumpMixer(mixer);
 
@@ -124,7 +121,7 @@ int main(void) {
 
         ULONG ticks;
         ULONG packets = 0;
-        while (mixer->am_ChannelState[3].ac_SamplesLeft > 0) {
+        while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
 
             ReadEClock(&clk_begin.ecv);
             Aud_MixPacket(mixer);
@@ -146,9 +143,8 @@ int main(void) {
 
         Aud_DumpMixer(mixer);
 
-        FreeCacheAligned(sound[0].s_dataPtr);
-        FreeCacheAligned(sound[1].s_dataPtr);
-        FreeCacheAligned(sound[2].s_dataPtr);
+        FreeCacheAligned(sound.s_dataPtr);
+        FreeCacheAligned(inverse.s_dataPtr);
 
         printf("Mixed %lu Packets in %lu EClockVal ticks (%lu/s)\n", packets, ticks, clock_freq_hz);
 
