@@ -113,7 +113,7 @@ Aud_MixPacket:
         tst.b   am_UseMultiplyMixing_b(a0)
         beq.s   .mix_samples_lookup
 
-; We are go to use direct multiplication for our 16 samples
+; We are going to use direct multiplication for our sample frame
 .mix_samples_multiply:
         clr.l   d0
         move.b  d5,d0   ; d0 = 0-15, 0 silence, 1-14 are volume table selectors
@@ -142,7 +142,7 @@ Aud_MixPacket:
         ; Complete and out
         bra.s   .update_channel
 
-; This is the lookup table driven mixer. Use this where multiplication is not fast
+; We are going to use table lookup for our sample frame.
 .mix_samples_lookup:
         move.b  d5,d0   ; d0 = 0-15, 0 silence, 1-14 are volume table selectors
         beq.s   .next_buffer_lookup
