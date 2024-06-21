@@ -2,9 +2,12 @@
 
 #include "mixer.h"
 #include <proto/exec.h>
-
 #include <devices/timer.h>
 #include <proto/timer.h>
+
+#include <dos/dos.h>
+#include <dos/rdargs.h>
+#include <proto/dos.h>
 
 typedef long long LONG64;
 typedef unsigned long long ULONG64;
@@ -70,12 +73,27 @@ void load_sample(char const* file_name, Sound* sound)
     }
 }
 
+#define OPT_MULTUPLY_MIX 0
+#define OPT_DUMP_BUFFERS 1
+
+LONG run_params[2] = { 0, 0 };
+
 int main(void) {
     if (!check_cpu()) {
         puts("CPU Check failed. 68040 or 68060 is required");
         return 10;
     }
 
+    struct RDArgs* args = NULL;
+
+    if ( (args = (struct RDArgs *)AllocDosObject(DOS_RDARGS, NULL) )) {
+
+        if (ReadArgs("M=Multiply/S,D=DumpBuffers/S", run_params, args)) {
+            FreeArgs(args);
+        }
+        FreeDosObject(DOS_RDARGS, args);
+        args = NULL;
+    }
 
     if (sizeof(Aud_Mixer) != asm_sizeof_mixer) {
         printf(
@@ -91,7 +109,7 @@ int main(void) {
 
     if (mixer) {
 
-        mixer->am_UseMultiplyMixing = 1;
+        mixer->am_UseMultiplyMixing = run_params[OPT_MULTUPLY_MIX] ? 1 : 0;
         mixer->am_UseMultiplyNormalisation = 1;
 
         TimerBase = get_timer();
@@ -117,11 +135,17 @@ int main(void) {
 
         Aud_DumpMixer(mixer);
 
+        FILE* lchan_out = NULL;
+        FILE* rchan_out = NULL;
+        FILE* lvol_out  = NULL;
+        FILE* rvol_out  = NULL;
 
-        FILE* lchan_out = fopen("lchan_out.raw", "wb");
-        FILE* rchan_out = fopen("rchan_out.raw", "wb");
-        FILE* lvol_out  = fopen("lvol_out.raw", "wb");
-        FILE* rvol_out  = fopen("rvol_out.raw", "wb");
+        if (run_params[OPT_DUMP_BUFFERS]) {
+            lchan_out = fopen("lchan_out.raw", "wb");
+            rchan_out = fopen("rchan_out.raw", "wb");
+            lvol_out  = fopen("lvol_out.raw", "wb");
+            rvol_out  = fopen("rvol_out.raw", "wb");
+        }
 
         ULONG ticks;
         ULONG packets = 0;
@@ -133,18 +157,38 @@ int main(void) {
             ++packets;
             ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);
 
-            fwrite(mixer->am_LeftPacketSampleBasePtr, 1, mixer->am_PacketSize, lchan_out);
-            fwrite(mixer->am_RightPacketSampleBasePtr, 1, mixer->am_PacketSize, rchan_out);
+            if (lchan_out) {
+                fwrite(mixer->am_LeftPacketSampleBasePtr, 1, mixer->am_PacketSize, lchan_out);
+            }
 
-            fwrite(mixer->am_LeftPacketVolumeBasePtr, 2, mixer->am_PacketSize >> 4, lvol_out);
-            fwrite(mixer->am_RightPacketVolumeBasePtr, 2, mixer->am_PacketSize >> 4, rvol_out);
+            if (rchan_out) {
+                fwrite(mixer->am_RightPacketSampleBasePtr, 1, mixer->am_PacketSize, rchan_out);
+            }
+
+            if (lvol_out) {
+                fwrite(mixer->am_LeftPacketVolumeBasePtr, 2, mixer->am_PacketSize >> 4, lvol_out);
+            }
+
+            if (rvol_out) {
+                fwrite(mixer->am_RightPacketVolumeBasePtr, 2, mixer->am_PacketSize >> 4, rvol_out);
+            }
         }
 
-        fclose(lchan_out);
-        fclose(lvol_out);
-        fclose(rchan_out);
-        fclose(rvol_out);
+        if (lchan_out) {
+            fclose(lchan_out);
+        }
 
+        if (lvol_out) {
+            fclose(lvol_out);
+        }
+
+        if (rchan_out) {
+            fclose(rchan_out);
+        }
+
+        if (rvol_out) {
+            fclose(rvol_out);
+        }
         Aud_DumpMixer(mixer);
 
         FreeCacheAligned(sound.s_dataPtr);
