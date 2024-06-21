@@ -45,6 +45,8 @@ AUD_NUM_CHANNELS    EQU 16
         UWORD  am_IndexL_w;
         UWORD  am_IndexR_w;
 
+        WORD_ARRAY am_VolumeScale_vw,AUD_8_TO_16_LEVELS
+
         ; Pointers to the eventual destination buffers in CHIP ram
         APTR am_LPacketSampleBasePtr_l ; contains normalised 8-bit sample data for the left channel
         APTR am_LPacketVolumeBasePtr_l ; contains 6-bit volume modulation data for the left channel
@@ -57,5 +59,8 @@ AUD_NUM_CHANNELS    EQU 16
 
         UWORD  am_PacketSize_w;
         UWORD  am_TableOffset_w;
+
+        UBYTE  am_UseMultiplyMixing_b;
+        UBYTE  am_UseMultiplyNormalisation_b;
 
         STRUCT_SIZE Aud_Mixer

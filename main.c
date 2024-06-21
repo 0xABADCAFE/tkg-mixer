@@ -90,6 +90,10 @@ int main(void) {
     Aud_Mixer* mixer = Aud_CreateMixer(16000, 50);
 
     if (mixer) {
+
+        mixer->am_UseMultiplyMixing = 1;
+        mixer->am_UseMultiplyNormalisation = 1;
+
         TimerBase = get_timer();
 
         Sound sound;

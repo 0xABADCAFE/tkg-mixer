@@ -74,13 +74,13 @@ Aud_MixPacket:
 .next_channel:
         ; Get the channel sample data pointer in a2, skip if null. We need to move to a data register to set the CC
         move.l  ac_SamplePtr_l(a1),d0
-        beq.s   .done_channel
+        beq   .done_channel
 
         move.l  d0,a2
 
         ; Check there if data left to process. This really should never happen
         tst.w   ac_SamplesLeft_w(a1)
-        beq.s   .done_channel
+        beq   .done_channel
 
         ; Get the left/right volume pair, each of which should be 0-15, with 0 being a silence skip
         move.w  ac_LeftVol_b(a1),d5
@@ -110,9 +110,42 @@ Aud_MixPacket:
 ; Accumulation - For each 8-bit sample in the fetch buffer, look up the 16-bit value in the volume table and
 ;                add to the values in the accumulation buffer
 
-.mix_samples:
+        tst.b   am_UseMultiplyMixing_b(a0)
+        beq.s   .mix_samples_lookup
+
+; We are go to use direct multiplication for our 16 samples
+.mix_samples_multiply:
+        clr.l   d0
         move.b  d5,d0   ; d0 = 0-15, 0 silence, 1-14 are volume table selectors
-        beq.s   .update_channel
+        beq.s   .next_buffer_multiply
+
+        ; Put the volume scale factor into d4
+        move.w  am_VolumeScale_vw(a0,d0.w*2),d4
+
+        ; Point a3 at the cache line of samples we loaded
+        lea     am_FetchBuffer_vb(a0),a3
+
+        moveq   #CACHE_LINE_SIZE-1,d1    ; num samples in d1
+
+.next_sample_multiply:
+        move.b  (a3)+,d0  ; next sample from the buffer
+        ext.w   d0        ; sign extend
+        muls.w  d4,d0     ; scale
+        add.w   d0,(a4)+  ; accumulate onto the target buffer
+        dbra    d1,.next_sample_multiply
+
+.next_buffer_multiply:
+        ; Now do the second step for the opposite side...
+        lsr.w   #8,d5
+        dbra    d3,.mix_samples_multiply
+
+        ; Complete and out
+        bra.s   .update_channel
+
+; This is the lookup table driven mixer. Use this where multiplication is not fast
+.mix_samples_lookup:
+        move.b  d5,d0   ; d0 = 0-15, 0 silence, 1-14 are volume table selectors
+        beq.s   .next_buffer_lookup
 
         subq.w  #1,d0   ; d0 = 0-14, now we need to multiply by 512 to get the table start
         lsl.w   #8,d0   ;
@@ -130,15 +163,16 @@ Aud_MixPacket:
         ; Index the table by sample value (as unsigned word)
         clr.w   d0
 
-.next_sample:
+.next_sample_lookup:
         move.b  (a3)+,d0         ; next 8-bit sample.
         move.w  (a2,d0.w*2),d4   ; look up the volume adjusted word
         add.w   d4,(a4)+         ; accumulate onto the target buffer
-        dbra    d1,.next_sample
+        dbra    d1,.next_sample_lookup
 
+.next_buffer_lookup:
         ; Now do the second step for the opposite side...
         lsr.w   #8,d5
-        dbra    d3,.mix_samples
+        dbra    d3,.mix_samples_lookup
 
 .update_channel:
         sub.w   #CACHE_LINE_SIZE,ac_SamplesLeft_w(a1)

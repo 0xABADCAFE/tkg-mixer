@@ -172,6 +172,7 @@ void Aud_SetMixerVolume(
     REG(d0, UWORD volume)
 )
 {
+
     /**
      * Generate AUD_8_TO_16_LEVELS-1 tables of 256 words each, intended to be indexed by the (unsigned) sample
      * position to obtain the desired 16-bit value.
@@ -179,9 +180,13 @@ void Aud_SetMixerVolume(
     WORD* table_ptr  = (WORD*)((UBYTE*)mixer + mixer->am_TableOffset);
     WORD  table_step = (WORD)(volume / AUD_8_TO_16_LEVELS);
     WORD  table_max  = table_step;
+
+    mixer->am_VolumeScale[0] = 0;
     for (int t = 0; t < (AUD_8_TO_16_LEVELS - 1); ++t) {
         WORD  level_step    = table_max / 128;
         WORD  level         = level_step;
+
+        mixer->am_VolumeScale[t+1] = level;
 
         table_ptr[0] = 0;
         table_ptr[(unsigned)((-128) & 0xFF)] = -table_max;
@@ -194,6 +199,7 @@ void Aud_SetMixerVolume(
         table_ptr += 256;
         table_max += table_step;
     }
+
 }
 
 extern void Aud_DumpMixer(
@@ -212,6 +218,8 @@ extern void Aud_DumpMixer(
         "\tVolume Tables at %p\n"
         "\tAbsMaxL %hu [Norm Index %hu]\n"
         "\tAbsMaxR %hu [Norm Index %hu]\n"
+        "\tMultiplication Mixing        %s\n"
+        "\tMultiplication Normalisation %s\n"
         "\tNorm Table at %p\n"
         "",
         mixer,
@@ -228,6 +236,8 @@ extern void Aud_DumpMixer(
         mixer->am_IndexL,
         mixer->am_AbsMaxR,
         mixer->am_IndexR,
+        mixer->am_UseMultiplyMixing ? "Enabled" : "Disabled",
+        mixer->am_UseMultiplyNormalisation ? "Enabled" : "Disabled",
         Aud_NormFactors_vw
     );
 

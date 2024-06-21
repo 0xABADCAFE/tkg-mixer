@@ -47,6 +47,10 @@ typedef struct {
     UWORD  am_IndexL;
     UWORD  am_IndexR;
 
+    // For machines with fast multiplication, we don't need to use the per-sample lookup
+    // volume tables, we can just store the scaling factors here.
+    WORD   am_VolumeScale[AUD_8_TO_16_LEVELS];
+
     // Config
     BYTE*  am_LeftPacketSampleBasePtr;  // contains am_PacketSize normalised 8-bit sample data for the left channel
     UWORD* am_LeftPacketVolumeBasePtr;  // contains am_PacketSize/16 6-bit volume modulation data for the left channel
@@ -59,6 +63,8 @@ typedef struct {
     UWORD  am_UpdateRateHz;
     UWORD  am_PacketSize;
     UWORD  am_TableOffset;
+    UBYTE  am_UseMultiplyMixing;
+    UBYTE  am_UseMultiplyNormalisation;
 } Aud_Mixer;
 
 extern Aud_Mixer *Aud_CreateMixer(
