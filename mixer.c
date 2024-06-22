@@ -137,7 +137,7 @@ Aud_Mixer *Aud_CreateMixer(
             return NULL;
         }
         Aud_ResetBuffers(mixer);
-        Aud_SetMixerVolume(mixer, 16384);
+        Aud_SetMixerVolume(mixer, 8192);
     }
     return mixer;
 }
