@@ -27,6 +27,11 @@ The aim is to replace the sound engine with something more sophisticated:
 ## Considerations
 The game already has quite high system requirements. Consequently, the aim is to design with 68040/68060/Emulation in mind. This section is a bit of a brain dump.
 
+### Concepts
+- Frame: A set of 16 sample values that will be processed together, including fetching, normalisation to a given volume, for playback.
+- Packet: A number of frames (min 1) that will be processed in a single mixing upadte operation.
+- Line: Any set of data that is aligned to and accessible as a cache line.
+
 ### CPU Considerations
 | Target | Feature | Implications |
 | - | - | - |
@@ -59,8 +64,62 @@ Data should be organised in a manner that facilitates cache line transfers:
 - Aligned to cache line size (16 bytes)
 - Processed in (multiples of) cache line size.
 
-For 68060, fast multiplication reduces the dependency on lookup tables and most operations can be based on it. However, for 68040, multiplication is too expensive to use as liberally. Precomputed lookup tables will be necessary, e.g. for a given channel volume, a table that maps an input 8-bit sample value to an output 16-bit sample. Such a table will comprise of 256 words (128 is possible if sign is handled separately) and there would need to be N-1 of them for N volume levels (sinc volume 0 is a special case).
+### 68060
+For 68060, fast multiplication means that tasks such as converting an 8-bit input sample at a given volume into a 16-bit intermediate for mixing, can be done in entirely the ALU. There is no need for any precoputed tables so the role of the datacache in these operations is not particularly important.  
 
-Assuming a simple 256-entry lookup per volume level the volume table occupies 512 bytes, i.e. 32 cache lines. In the worst possible case, each of the 16 input samples looks up a value in a different cache line, resulting in 16 cache line loads. However, most real audio data tends to be more predictable than this. A simulation using 512KB of 8-bit audio shows that the vast majority of accesses happen within the first and last four cache line's worth of the table.
+### 68040
+For the 68040, multiplication is far more expensive. The use of lookup tables to convert an 8-bit input sample at a given volume into a 16-bit intermediate is unavoidable and therefore the role of cache is much more important.
 
-A way to improve this significantly is to delta encode the 8-bit sample data, which causes the accesses to map to just the first and last line in the table. This mechanism still works because the effect of volume scaling the absolute sample value or the delta between any pair, is the same.
+The most naive implementation would require a 256-entry lookup table of the 16-bit intermediate, per volume level. We have 32 lines that can be hit for a given 8-bit input. In the worst case, each input value in a frame maps to a different line location, resulting in 16 cache line reads during conversion of that frame. However, real audio data tends to be more predictable than this.
+
+A simulation was performed with approximately 512KiB of 8-bit audio in order to assess the hit rate on each line. As expected, the first and last lines of the table had the highest hit rates (the entries beyond index 128 correspond to negative values, approaching -1 for index 255):
+
+ | Line |  Access | Hit % |
+ | - | - | - |
+ |    0 |   76389 | 14.61 | 
+ |    1 |   70581 | 13.50 | 
+ |    2 |   43585 |  8.34 | 
+ |    3 |   25762 |  4.93 | 
+ |    4 |   16787 |  3.21 | 
+ |    5 |   10519 |  2.01 | 
+ |    6 |    6788 |  1.30 |
+ | ... | ... | < 1 % |
+ |   24 |    6228 |  1.19 | 
+ |   25 |    8125 |  1.55 | 
+ |   26 |   11435 |  2.19 | 
+ |   27 |   17149 |  3.28 | 
+ |   28 |   28256 |  5.40 | 
+ |   29 |   43274 |  8.28 | 
+ |   30 |   61325 | 11.73 | 
+ |   31 |   71899 | 13.75 | 
+
+This access pattern is still not ideal, given that there will be up to 16 frames to mix and each frame having independent left and right volumes. We only have 4KiB of data cache. To address this, one obvious solution is to first convert the 8-bit sample into a difference from the previous one. This delta value can then be looked up instead and the resulting 16-bit value considered as a delta to be added to a running 16-bit value for the frame. Doing this results in significantly improved hit rates on the first lines:
+
+ | Line |  Access | Hit % |
+ | - | - | - |
+ |    0 |  249939 | 47.81 | 
+ |    1 |   34017 |  6.51 | 
+ |    2 |   11089 |  2.12 | 
+ | ... | ... | < 1 % |
+  |   29 |   10186 |  1.95 | 
+ |   30 |   28590 |  5.47 | 
+ |   31 |  176334 | 33.73 | 
+
+Implementing this delta mechanism across frames presents a number of complexities that it would be nice to avoid. Conversely, a variant in which the first lookup is linear and the subsequent 15 are delta was also simulated:
+
+ | Line |  Access | Hit % |
+ | - | - | - |
+ |    0 |  238106 | 45.55 | 
+ |    1 |   36702 |  7.02 | 
+ |    2 |   12922 |  2.47 | 
+ |    3 |    5635 |  1.08 | 
+ | ... | ... | < 1 % |
+ |   28 |    5570 |  1.07 | 
+ |   29 |   12210 |  2.34 | 
+ |   30 |   30481 |  5.83 | 
+ |   31 |  170615 | 32.64 | 
+
+This is still significantly better than the linear case. For completeness, a plot of hit rates for each method on all 32 lines is shown below. Note the Y axis is log scaled in order to better visualise the differences.
+![Line Hit Rate Simulations](./design/LUT_CacheLog.png)
+
+The performance of the cache could be improved by storing only the positive values in these tables, halving the storage required. However, this needs to be weighed against the cost of dealing with the sign handling.
