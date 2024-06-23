@@ -15,10 +15,16 @@ VFLAGS = -b amigahunk -sc -l amiga -L m68k-amigaos/ndk/lib/libs
 
 OBJS = main.o \
 	mixer.o \
-	mixer_asm.o
-	   
+	mixer_asm.o \
+	mixer_060_asm.o
+
 mixer: mixer_asm.o
 	$(VLINK) $(VFLAGS) $< -o $@
+
+mixer: mixer_060_asm.o
+	$(VLINK) $(VFLAGS) $< -o $@
+
+
 
 mixer:	${OBJS}
 	$(LINK) $(LFLAGS) $^ -o $@

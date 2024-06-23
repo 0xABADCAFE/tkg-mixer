@@ -4,6 +4,8 @@
 ; Size of a cache line in bytes
 CACHE_LINE_SIZE     EQU 16
 
+CACHE_LINE_SIZE_EXP EQU 4
+
 ; Number volume steps
 AUD_8_TO_16_LEVELS  EQU 16
 

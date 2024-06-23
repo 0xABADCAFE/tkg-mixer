@@ -88,7 +88,7 @@ int main(void) {
 
     if ( (args = (struct RDArgs *)AllocDosObject(DOS_RDARGS, NULL) )) {
 
-        if (ReadArgs("M=Multiply/S,D=DumpBuffers/S", run_params, args)) {
+        if (ReadArgs("Use060/S,D=DumpBuffers/S", run_params, args)) {
             FreeArgs(args);
         }
         FreeDosObject(DOS_RDARGS, args);
@@ -152,7 +152,7 @@ int main(void) {
         while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
 
             ReadEClock(&clk_begin.ecv);
-            Aud_MixPacket(mixer);
+            Aud_MixPacket_060(mixer);
             ReadEClock(&clk_end.ecv);
             ++packets;
             ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);

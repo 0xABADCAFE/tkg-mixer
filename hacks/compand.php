@@ -1,11 +1,11 @@
 <?php
 
 
-$sLeftChan = file_get_contents('lchan_out.raw');
-$sLeftVol  = file_get_contents('lvol_out.raw');
+$sLeftChan = file_get_contents('../lchan_out.raw');
+$sLeftVol  = file_get_contents('../lvol_out.raw');
 
-$sRightChan = file_get_contents('rchan_out.raw');
-$sRightVol  = file_get_contents('rvol_out.raw');
+$sRightChan = file_get_contents('../rchan_out.raw');
+$sRightVol  = file_get_contents('../rvol_out.raw');
 
 $iLimit = strlen($sLeftChan);
 
