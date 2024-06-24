@@ -73,7 +73,7 @@ void load_sample(char const* file_name, Sound* sound)
     }
 }
 
-#define OPT_MULTUPLY_MIX 0
+#define OPT_USE_060 0
 #define OPT_DUMP_BUFFERS 1
 
 LONG run_params[2] = { 0, 0 };
@@ -108,9 +108,6 @@ int main(void) {
     Aud_Mixer* mixer = Aud_CreateMixer(16000, 50);
 
     if (mixer) {
-
-        mixer->am_UseMultiplyMixing = run_params[OPT_MULTUPLY_MIX] ? 1 : 0;
-        mixer->am_UseMultiplyNormalisation = 1;
 
         TimerBase = get_timer();
 
@@ -152,7 +149,7 @@ int main(void) {
         while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
 
             ReadEClock(&clk_begin.ecv);
-            Aud_MixPacket_060(mixer);
+            Aud_MixPacket_040(mixer);
             ReadEClock(&clk_end.ecv);
             ++packets;
             ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);

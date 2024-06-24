@@ -89,6 +89,9 @@ extern void Aud_MixPacket_060(
     REG(a0, Aud_Mixer* mixer)
 );
 
+extern void Aud_MixPacket_040(
+    REG(a0, Aud_Mixer* mixer)
+);
 
 extern void Aud_DumpMixer(
     REG(a0, Aud_Mixer* mixer)
