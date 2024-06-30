@@ -73,26 +73,78 @@ void load_sample(char const* file_name, Sound* sound)
     }
 }
 
-#define OPT_USE_060 0
-#define OPT_DUMP_BUFFERS 1
+enum {
+    OPT_USE_060 = 0,
+    OPT_DUMP_BUFFERS,
+    OPT_VERBOSE,
+    OPT_MAX
+};
 
-LONG run_params[2] = { 0, 0 };
+static LONG ra_Params[OPT_MAX] = { 0, 0 };
+
+static void parse_params(void) {
+    struct RDArgs* args = NULL;
+    if ( (args = (struct RDArgs *)AllocDosObject(DOS_RDARGS, NULL) )) {
+        if (ReadArgs("6=USE060/S,D=DUMPBUFFERS/S,V=VERBOSE/S", ra_Params, args)) {
+            FreeArgs(args);
+        }
+        FreeDosObject(DOS_RDARGS, args);
+        args = NULL;
+
+        if (ra_Params[OPT_USE_060]) {
+            puts("Using 68060 code path");
+        } else {
+            puts("Using 68040 code path");
+        }
+    }
+}
+
+static FILE* db_LChanOut = NULL;
+static FILE* db_RChanOut = NULL;
+static FILE* db_LVolOut  = NULL;
+static FILE* db_RVolOut  = NULL;
+
+static void open_dump(void) {
+    db_LChanOut = fopen("lchan_out.raw", "wb");
+    db_RChanOut = fopen("rchan_out.raw", "wb");
+    db_LVolOut  = fopen("lvol_out.raw", "wb");
+    db_RVolOut  = fopen("rvol_out.raw", "wb");
+}
+
+static void close_dump(void) {
+    if (db_LChanOut) {
+        fclose(db_LChanOut);
+    }
+    if (db_LVolOut) {
+        fclose(db_LVolOut);
+    }
+    if (db_RChanOut) {
+        fclose(db_RChanOut);
+    }
+    if (db_RVolOut) {
+        fclose(db_RVolOut);
+    }
+}
+
+void dump_mixer(Aud_Mixer const* mixer) {
+    if (db_LChanOut) {
+        fwrite(mixer->am_LeftPacketSampleBasePtr, 1, mixer->am_PacketSize, db_LChanOut);
+    }
+    if (db_RChanOut) {
+        fwrite(mixer->am_RightPacketSampleBasePtr, 1, mixer->am_PacketSize, db_RChanOut);
+    }
+    if (db_LVolOut) {
+        fwrite(mixer->am_LeftPacketVolumeBasePtr, 2, mixer->am_PacketSize >> 4, db_LVolOut);
+    }
+    if (db_RVolOut) {
+        fwrite(mixer->am_RightPacketVolumeBasePtr, 2, mixer->am_PacketSize >> 4, db_RVolOut);
+    }
+}
 
 int main(void) {
     if (!check_cpu()) {
         puts("CPU Check failed. 68040 or 68060 is required");
         return 10;
-    }
-
-    struct RDArgs* args = NULL;
-
-    if ( (args = (struct RDArgs *)AllocDosObject(DOS_RDARGS, NULL) )) {
-
-        if (ReadArgs("Use060/S,D=DumpBuffers/S", run_params, args)) {
-            FreeArgs(args);
-        }
-        FreeDosObject(DOS_RDARGS, args);
-        args = NULL;
     }
 
     if (sizeof(Aud_Mixer) != asm_sizeof_mixer) {
@@ -104,11 +156,11 @@ int main(void) {
         return 20;
     }
 
+    parse_params();
 
     Aud_Mixer* mixer = Aud_CreateMixer(16000, 50);
 
     if (mixer) {
-
         TimerBase = get_timer();
 
         Sound sound;
@@ -130,63 +182,46 @@ int main(void) {
             mixer->am_ChannelState[chan].ac_RightVolume = 15 - chan;
         }
 
-        Aud_DumpMixer(mixer);
+        mixer->am_ChannelState[0].ac_SamplesLeft = sound.s_length;
+        mixer->am_ChannelState[0].ac_SamplePtr   = sound.s_dataPtr;
+        mixer->am_ChannelState[0].ac_LeftVolume  = 15;
+        mixer->am_ChannelState[0].ac_RightVolume = 15;
 
-        FILE* lchan_out = NULL;
-        FILE* rchan_out = NULL;
-        FILE* lvol_out  = NULL;
-        FILE* rvol_out  = NULL;
+        if (ra_Params[OPT_VERBOSE]) {
+            Aud_DumpMixer(mixer);
+        }
 
-        if (run_params[OPT_DUMP_BUFFERS]) {
-            lchan_out = fopen("lchan_out.raw", "wb");
-            rchan_out = fopen("rchan_out.raw", "wb");
-            lvol_out  = fopen("lvol_out.raw", "wb");
-            rvol_out  = fopen("rvol_out.raw", "wb");
+        if (ra_Params[OPT_DUMP_BUFFERS]) {
+            open_dump();
         }
 
         ULONG ticks;
         ULONG packets = 0;
-        while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
 
+        while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
             ReadEClock(&clk_begin.ecv);
-            Aud_MixPacket_040(mixer);
+            if (ra_Params[OPT_USE_060]) {
+                Aud_MixPacket_060(mixer);
+            }
+            else {
+                Aud_MixPacket_040(mixer);
+            }
             ReadEClock(&clk_end.ecv);
             ++packets;
             ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);
 
-            if (lchan_out) {
-                fwrite(mixer->am_LeftPacketSampleBasePtr, 1, mixer->am_PacketSize, lchan_out);
-            }
-
-            if (rchan_out) {
-                fwrite(mixer->am_RightPacketSampleBasePtr, 1, mixer->am_PacketSize, rchan_out);
-            }
-
-            if (lvol_out) {
-                fwrite(mixer->am_LeftPacketVolumeBasePtr, 2, mixer->am_PacketSize >> 4, lvol_out);
-            }
-
-            if (rvol_out) {
-                fwrite(mixer->am_RightPacketVolumeBasePtr, 2, mixer->am_PacketSize >> 4, rvol_out);
+            if (ra_Params[OPT_DUMP_BUFFERS]) {
+                dump_mixer(mixer);
             }
         }
 
-        if (lchan_out) {
-            fclose(lchan_out);
+        if (ra_Params[OPT_DUMP_BUFFERS]) {
+            close_dump();
         }
 
-        if (lvol_out) {
-            fclose(lvol_out);
+        if (ra_Params[OPT_VERBOSE]) {
+            Aud_DumpMixer(mixer);
         }
-
-        if (rchan_out) {
-            fclose(rchan_out);
-        }
-
-        if (rvol_out) {
-            fclose(rvol_out);
-        }
-        Aud_DumpMixer(mixer);
 
         FreeCacheAligned(sound.s_dataPtr);
         FreeCacheAligned(inverse.s_dataPtr);

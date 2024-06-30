@@ -19,13 +19,13 @@ OBJS = main.o \
 	mixer_040_asm.o \
 	mixer_060_asm.o
 
-mixer: mixer_asm.o
+mixer:	mixer_asm.o
 	$(VLINK) $(VFLAGS) $< -o $@
 
-mixer: mixer_040_asm.o
+	mixer_040_asm.o
 	$(VLINK) $(VFLAGS) $< -o $@
 
-mixer: mixer_060_asm.o
+	mixer_060_asm.o
 	$(VLINK) $(VFLAGS) $< -o $@
 
 mixer:	${OBJS}

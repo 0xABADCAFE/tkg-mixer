@@ -23,6 +23,7 @@ Aud_MixPacket_040:
         lsr.w   #4,d6
         subq.w  #1,d6
 
+
         ; Reset the working pointers
         lea     am_LPacketSamplePtr_l(a0),a1
         lea     am_LPacketSampleBasePtr_l(a0),a2
@@ -32,6 +33,8 @@ Aud_MixPacket_040:
         move.l  (a2)+,(a1)+
 
 .mix_next_line:
+        swap    d6
+
 ;
 ; Initialisation - clear out the accumulation buffers
 ;
@@ -110,7 +113,7 @@ Aud_MixPacket_040:
         ; Point a3 at the cache line of samples we loaded
         lea     am_FetchBuffer_vb(a0),a3
 
-        moveq   #CACHE_LINE_SIZE-1,d1    ; num samples in d1
+        moveq   #CACHE_LINE_SIZE-2,d1    ; num samples in d1
 
         ; Index the table by sample value (as unsigned word)
         clr.w   d0
@@ -123,10 +126,19 @@ Aud_MixPacket_040:
         ; d5.w vol pair
         ; d6.w frame count
 
-.mix_next_sample:
+.mix_first_sample:
         move.b  (a3)+,d0         ; next 8-bit sample.
         move.w  (a2,d0.w*2),d4   ; look up the volume adjusted word
         add.w   d4,(a4)+         ; accumulate onto the target buffer
+        move.w  d0,d6            ; d6.w contains last 8-bit sample value
+
+.mix_next_sample:
+        neg.b   d0               ; Calculate the next 8-bit delta in d0
+        move.b  (a3)+,d6         ; Next 8-bit sample in d6
+        add.b   d6,d0            ; 8-bit delta in d0
+        add.w   (a2,d0.w*2),d4   ; Add looked up 16-bit delta to last 16-bit sample
+        add.w   d4,(a4)+         ; Accumulate
+        move.b  d6,d0
         dbra    d1,.mix_next_sample
 
 .mix_next_buffer:
@@ -282,6 +294,8 @@ Aud_MixPacket_040:
         lea     8(a4),a4              ; next buffer pair
 
         dbra    d3,.normalize_next
+
+        swap    d6
 
         dbra    d6,.mix_next_line
 
