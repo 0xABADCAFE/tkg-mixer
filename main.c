@@ -75,17 +75,18 @@ void load_sample(char const* file_name, Sound* sound)
 
 enum {
     OPT_USE_060 = 0,
+    OPT_LINEAR,
     OPT_DUMP_BUFFERS,
     OPT_VERBOSE,
     OPT_MAX
 };
 
-static LONG ra_Params[OPT_MAX] = { 0, 0 };
+static LONG ra_Params[OPT_MAX] = { 0, 0, 0, 0 };
 
 static void parse_params(void) {
     struct RDArgs* args = NULL;
     if ( (args = (struct RDArgs *)AllocDosObject(DOS_RDARGS, NULL) )) {
-        if (ReadArgs("6=USE060/S,D=DUMPBUFFERS/S,V=VERBOSE/S", ra_Params, args)) {
+        if (ReadArgs("6=USE060/S,L=LINEAR/S,D=DUMPBUFFERS/S,V=VERBOSE/S", ra_Params, args)) {
             FreeArgs(args);
         }
         FreeDosObject(DOS_RDARGS, args);
@@ -94,7 +95,13 @@ static void parse_params(void) {
         if (ra_Params[OPT_USE_060]) {
             puts("Using 68060 code path");
         } else {
-            puts("Using 68040 code path");
+
+            if (ra_Params[OPT_LINEAR]) {
+                puts("Using 68040 linear lookup code path");
+            } else {
+                puts("Using 68040 delta lookup code path");
+            }
+
         }
     }
 }
@@ -173,60 +180,60 @@ int main(void) {
             inverse.s_dataPtr[s] = - sound.s_dataPtr[s];
         }
 
-        for (int chan = 0; chan < AUD_NUM_CHANNELS; ++chan) {
-            mixer->am_ChannelState[chan].ac_SamplePtr   = (
-                (chan & 1) ? sound.s_dataPtr : inverse.s_dataPtr
-            ) + (chan << 5);
-            mixer->am_ChannelState[chan].ac_SamplesLeft = sound.s_length - (chan << 5);
-            mixer->am_ChannelState[chan].ac_LeftVolume  = chan;
-            mixer->am_ChannelState[chan].ac_RightVolume = 15 - chan;
-        }
-
-        mixer->am_ChannelState[0].ac_SamplesLeft = sound.s_length;
-        mixer->am_ChannelState[0].ac_SamplePtr   = sound.s_dataPtr;
-        mixer->am_ChannelState[0].ac_LeftVolume  = 15;
-        mixer->am_ChannelState[0].ac_RightVolume = 15;
-
-        if (ra_Params[OPT_VERBOSE]) {
-            Aud_DumpMixer(mixer);
-        }
-
         if (ra_Params[OPT_DUMP_BUFFERS]) {
             open_dump();
         }
 
-        ULONG ticks;
-        ULONG packets = 0;
+        for (int max_chan = 1; max_chan < AUD_NUM_CHANNELS; ++max_chan) {
+            printf("Testing with %d channel(s)\n", max_chan);
 
-        while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
-            ReadEClock(&clk_begin.ecv);
-            if (ra_Params[OPT_USE_060]) {
-                Aud_MixPacket_060(mixer);
+            for (int chan = 0; chan < max_chan; ++chan) {
+                mixer->am_ChannelState[chan].ac_SamplePtr   = (
+                    (chan & 1) ? sound.s_dataPtr : inverse.s_dataPtr
+                ) + (chan << 5);
+                mixer->am_ChannelState[chan].ac_SamplesLeft = sound.s_length - (chan << 5);
+                mixer->am_ChannelState[chan].ac_LeftVolume  = chan;
+                mixer->am_ChannelState[chan].ac_RightVolume = 15 - chan;
             }
-            else {
-                Aud_MixPacket_040(mixer);
-            }
-            ReadEClock(&clk_end.ecv);
-            ++packets;
-            ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);
 
-            if (ra_Params[OPT_DUMP_BUFFERS]) {
-                dump_mixer(mixer);
+            if (ra_Params[OPT_VERBOSE]) {
+                Aud_DumpMixer(mixer);
             }
+
+            ULONG ticks;
+            ULONG packets = 0;
+
+            while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
+                ReadEClock(&clk_begin.ecv);
+                if (ra_Params[OPT_USE_060]) {
+                    Aud_MixPacket_060(mixer);
+                }
+                else if (ra_Params[OPT_LINEAR]) {
+                    Aud_MixPacket_040Linear(mixer);
+                } else {
+                    Aud_MixPacket_040Delta(mixer);
+                }
+                ReadEClock(&clk_end.ecv);
+                ++packets;
+                ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);
+
+                if (ra_Params[OPT_DUMP_BUFFERS]) {
+                    dump_mixer(mixer);
+                }
+            }
+            if (ra_Params[OPT_VERBOSE]) {
+                Aud_DumpMixer(mixer);
+            }
+            printf("Mixed %lu Packets in %lu EClockVal ticks (%lu/s)\n", packets, ticks, clock_freq_hz);
         }
 
         if (ra_Params[OPT_DUMP_BUFFERS]) {
             close_dump();
         }
 
-        if (ra_Params[OPT_VERBOSE]) {
-            Aud_DumpMixer(mixer);
-        }
 
         FreeCacheAligned(sound.s_dataPtr);
         FreeCacheAligned(inverse.s_dataPtr);
-
-        printf("Mixed %lu Packets in %lu EClockVal ticks (%lu/s)\n", packets, ticks, clock_freq_hz);
 
         free_timer();
         Aud_FreeMixer(mixer);
