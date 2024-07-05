@@ -184,7 +184,7 @@ int main(void) {
             open_dump();
         }
 
-        for (int max_chan = 1; max_chan < AUD_NUM_CHANNELS; ++max_chan) {
+        for (int max_chan = 1; max_chan <= AUD_NUM_CHANNELS; ++max_chan) {
             printf("Testing with %d channel(s)\n", max_chan);
 
             for (int chan = 0; chan < max_chan; ++chan) {
