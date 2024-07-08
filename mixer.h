@@ -97,6 +97,9 @@ extern void Aud_MixPacket_040Linear(
     REG(a0, Aud_Mixer* mixer)
 );
 
+extern void Aud_MixPacket_040Shifted(
+    REG(a0, Aud_Mixer* mixer)
+);
 
 extern void Aud_DumpMixer(
     REG(a0, Aud_Mixer* mixer)

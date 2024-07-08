@@ -36,7 +36,7 @@ struct Device* get_timer(void) {
     }
     TimerBase = time_request.tr_node.io_Device;
     clock_freq_hz = ReadEClock(&clk_begin.ecv);
-    printf("Got Timer, frequency is %u Hz\n", clock_freq_hz);
+    printf("Got Timer, tick frequency is %u Hz\n", clock_freq_hz);
     return TimerBase;
 }
 
@@ -74,35 +74,21 @@ void load_sample(char const* file_name, Sound* sound)
 }
 
 enum {
-    OPT_USE_060 = 0,
-    OPT_LINEAR,
-    OPT_DUMP_BUFFERS,
+    OPT_DUMP_BUFFERS=0,
     OPT_VERBOSE,
     OPT_MAX
 };
 
-static LONG ra_Params[OPT_MAX] = { 0, 0, 0, 0 };
+static LONG ra_Params[OPT_MAX] = { 0, 0, };
 
 static void parse_params(void) {
     struct RDArgs* args = NULL;
     if ( (args = (struct RDArgs *)AllocDosObject(DOS_RDARGS, NULL) )) {
-        if (ReadArgs("6=USE060/S,L=LINEAR/S,D=DUMPBUFFERS/S,V=VERBOSE/S", ra_Params, args)) {
+        if (ReadArgs("D=DUMPBUFFERS/S,V=VERBOSE/S", ra_Params, args)) {
             FreeArgs(args);
         }
         FreeDosObject(DOS_RDARGS, args);
         args = NULL;
-
-        if (ra_Params[OPT_USE_060]) {
-            puts("Using 68060 code path");
-        } else {
-
-            if (ra_Params[OPT_LINEAR]) {
-                puts("Using 68040 linear lookup code path");
-            } else {
-                puts("Using 68040 delta lookup code path");
-            }
-
-        }
     }
 }
 
@@ -154,6 +140,44 @@ void dump_mixer(Aud_Mixer const* mixer) {
     ReadEClock(&clk_end.ecv);
 
 
+typedef void (*Mix_Function)(REG(a0, Aud_Mixer* mixer));
+
+typedef struct {
+    Mix_Function mix_function;
+    char const*  mix_info;
+    char const*  norm_info;
+    char const*  extra_info;
+} TestCase;
+
+static TestCase test_cases[] = {
+    {
+        Aud_MixPacket_060,
+        "Multiplication",
+        "Multiplication/Shift",
+        "Move16 fetch, target 68060"
+    },
+    {
+        Aud_MixPacket_040Linear,
+        "Lookup",
+        "Multiplication/Shift",
+        "Move16 fetch, target 68040/60"
+    },
+    {
+        Aud_MixPacket_040Delta,
+        "Delta Lookup",
+        "Multiplication/Shift",
+        "Move16 fetch, target 68040/60"
+    },
+    {
+        Aud_MixPacket_040Shifted,
+        "Shift Only",
+        "Multiplication/Shift",
+        "Move16 fetch, target 68040"
+    },
+
+};
+
+
 int main(void) {
     if (!check_cpu()) {
         puts("CPU Check failed. 68040 or 68060 is required");
@@ -190,51 +214,59 @@ int main(void) {
             open_dump();
         }
 
-        for (int max_chan = 1; max_chan <= AUD_NUM_CHANNELS; ++max_chan) {
-            printf("Testing with %d channel(s)\n", max_chan);
+        for (size_t test = 0; test < sizeof(test_cases)/sizeof(TestCase); ++test) {
 
-            for (int chan = 0; chan < max_chan; ++chan) {
-                mixer->am_ChannelState[chan].ac_SamplePtr   = (
-                    (chan & 1) ? sound.s_dataPtr : inverse.s_dataPtr
-                ) + (chan << 5);
-                mixer->am_ChannelState[chan].ac_SamplesLeft = sound.s_length - (chan << 5);
-                mixer->am_ChannelState[chan].ac_LeftVolume  = chan;
-                mixer->am_ChannelState[chan].ac_RightVolume = 15 - chan;
-            }
+            printf(
+                "Test case %zu:\n"
+                "\tMix : %s\n"
+                "\tNorm: %s\n"
+                "\tInfo: %s\n\n",
+                test,
+                test_cases[test].mix_info,
+                test_cases[test].norm_info,
+                test_cases[test].extra_info
+            );
 
-            if (ra_Params[OPT_VERBOSE]) {
-                Aud_DumpMixer(mixer);
-            }
+            for (int max_chan = 1; max_chan <= AUD_NUM_CHANNELS; ++max_chan) {
+                printf("\tMixing %2d channel(s): ", max_chan);
 
-            ULONG ticks   = 0;
-            ULONG packets = 0;
-
-            while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
-                if (ra_Params[OPT_USE_060]) {
-                    time(Aud_MixPacket_060(mixer));
+                for (int chan = 0; chan < max_chan; ++chan) {
+                    mixer->am_ChannelState[chan].ac_SamplePtr   = (
+                        (chan & 1) ? sound.s_dataPtr : inverse.s_dataPtr
+                    ) + (chan << 5);
+                    mixer->am_ChannelState[chan].ac_SamplesLeft = sound.s_length - (chan << 5);
+                    mixer->am_ChannelState[chan].ac_LeftVolume  = chan;
+                    mixer->am_ChannelState[chan].ac_RightVolume = 15 - chan;
                 }
-                else if (ra_Params[OPT_LINEAR]) {
-                    time(Aud_MixPacket_040Linear(mixer));
-                } else {
-                    time(Aud_MixPacket_040Delta(mixer));
-                }
-                ++packets;
-                ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);
 
-                if (ra_Params[OPT_DUMP_BUFFERS]) {
-                    dump_mixer(mixer);
+                if (ra_Params[OPT_VERBOSE]) {
+                    Aud_DumpMixer(mixer);
                 }
+
+                ULONG ticks   = 0;
+                ULONG packets = 0;
+
+                while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
+                    time(test_cases[test].mix_function(mixer));
+
+                    ++packets;
+                    ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);
+
+                    if (ra_Params[OPT_DUMP_BUFFERS]) {
+                        dump_mixer(mixer);
+                    }
+                }
+                if (ra_Params[OPT_VERBOSE]) {
+                    Aud_DumpMixer(mixer);
+                }
+                printf(" %7lu ticks %lu packets\n", ticks, packets);
             }
-            if (ra_Params[OPT_VERBOSE]) {
-                Aud_DumpMixer(mixer);
-            }
-            printf("Mixed %lu Packets in %lu EClockVal ticks (%lu/s)\n", packets, ticks, clock_freq_hz);
+
         }
 
         if (ra_Params[OPT_DUMP_BUFFERS]) {
             close_dump();
         }
-
 
         FreeCacheAligned(sound.s_dataPtr);
         FreeCacheAligned(inverse.s_dataPtr);
