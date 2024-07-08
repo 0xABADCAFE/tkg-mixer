@@ -148,6 +148,12 @@ void dump_mixer(Aud_Mixer const* mixer) {
     }
 }
 
+#define time(f) \
+    ReadEClock(&clk_begin.ecv);\
+    f; \
+    ReadEClock(&clk_end.ecv);
+
+
 int main(void) {
     if (!check_cpu()) {
         puts("CPU Check failed. 68040 or 68060 is required");
@@ -200,20 +206,18 @@ int main(void) {
                 Aud_DumpMixer(mixer);
             }
 
-            ULONG ticks;
+            ULONG ticks   = 0;
             ULONG packets = 0;
 
             while (mixer->am_ChannelState[0].ac_SamplesLeft > 0) {
-                ReadEClock(&clk_begin.ecv);
                 if (ra_Params[OPT_USE_060]) {
-                    Aud_MixPacket_060(mixer);
+                    time(Aud_MixPacket_060(mixer));
                 }
                 else if (ra_Params[OPT_LINEAR]) {
-                    Aud_MixPacket_040Linear(mixer);
+                    time(Aud_MixPacket_040Linear(mixer));
                 } else {
-                    Aud_MixPacket_040Delta(mixer);
+                    time(Aud_MixPacket_040Delta(mixer));
                 }
-                ReadEClock(&clk_end.ecv);
                 ++packets;
                 ticks += (ULONG)(clk_end.ticks - clk_begin.ticks);
 
