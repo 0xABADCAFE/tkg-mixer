@@ -163,6 +163,14 @@ static TestCase test_cases[] = {
         "Multiplication/Shift",
         "Move16 fetch, target 68060"
     },
+
+    {
+        Aud_MixPacket_040Shifted,
+        "Shift Only",
+        "Multiplication/Shift",
+        "Move16 fetch, target 68040"
+    },
+
     {
         Aud_MixPacket_040Linear,
         "Lookup",
@@ -176,6 +184,7 @@ static TestCase test_cases[] = {
         "Move16 fetch, target 68040/60"
     },
 
+    // Pre-encoded tests follow. The samples will be converted
     {
         Aud_MixPacket_040PreDelta,
         "Delta Lookup (Pre-encoded source)",
@@ -183,15 +192,22 @@ static TestCase test_cases[] = {
         "Move16 fetch, target 68040"
     },
 
-    {
-        Aud_MixPacket_040Shifted,
-        "Shift Only",
-        "Multiplication/Shift",
-        "Move16 fetch, target 68040"
-    },
-
 };
 
+
+void EncodeL1D15(Sound* p_sound) {
+    ULONG frames = p_sound->s_length >> 4;
+    BYTE *p_data = p_sound->s_dataPtr;
+
+    for (ULONG f = 0; f<frames; ++f) {
+
+        for (int i=15; i > 0; --i) {
+            p_data[i] -= p_data[i - 1];
+        }
+
+        p_data += CACHE_LINE_SIZE;
+    }
+}
 
 int main(void) {
     if (!check_cpu()) {
@@ -230,6 +246,11 @@ int main(void) {
         }
 
         for (size_t test = 0; test < sizeof(test_cases)/sizeof(TestCase); ++test) {
+
+            if (Aud_MixPacket_040PreDelta == test_cases->mix_function) {
+                EncodeL1D15(&sound);
+                EncodeL1D15(&inverse);
+            }
 
             printf(
                 "Test case %zu:\n"
