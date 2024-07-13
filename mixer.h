@@ -89,9 +89,18 @@ extern void Aud_MixPacket_060(
     REG(a0, Aud_Mixer* mixer)
 );
 
+extern void Aud_MixPacket_040Null(
+    REG(a0, Aud_Mixer* mixer)
+);
+
 extern void Aud_MixPacket_040Delta(
     REG(a0, Aud_Mixer* mixer)
 );
+
+extern void Aud_MixPacket_040PreDelta(
+    REG(a0, Aud_Mixer* mixer)
+);
+
 
 extern void Aud_MixPacket_040Linear(
     REG(a0, Aud_Mixer* mixer)

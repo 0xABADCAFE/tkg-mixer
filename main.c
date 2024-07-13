@@ -151,6 +151,13 @@ typedef struct {
 
 static TestCase test_cases[] = {
     {
+        Aud_MixPacket_040Null,
+        "None (data fectch only)",
+        "None (data write only)",
+        "Move16 fetch, target 68040/60"
+    },
+
+    {
         Aud_MixPacket_060,
         "Multiplication",
         "Multiplication/Shift",
@@ -168,6 +175,14 @@ static TestCase test_cases[] = {
         "Multiplication/Shift",
         "Move16 fetch, target 68040/60"
     },
+
+    {
+        Aud_MixPacket_040PreDelta,
+        "Delta Lookup (Pre-encoded source)",
+        "Multiplication/Shift",
+        "Move16 fetch, target 68040"
+    },
+
     {
         Aud_MixPacket_040Shifted,
         "Shift Only",
