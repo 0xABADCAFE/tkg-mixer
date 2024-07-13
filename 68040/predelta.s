@@ -128,7 +128,7 @@ Aud_MixPacket_040PreDelta:
 
         ; d4 contains the current 16-bit value
 .mix_next_sample:
-        move.b  (a3)+,d0         ; next delta in d0
+        move.b  (a3)+,d0         ; next 8-bit delta in d0
         add.w   (a2,d0.w*2),d4   ; add lookup to current
         add.w   d4,(a4)+         ; Accumulate
         dbra    d1,.mix_next_sample

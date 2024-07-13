@@ -150,6 +150,7 @@ typedef struct {
 } TestCase;
 
 static TestCase test_cases[] = {
+
     {
         Aud_MixPacket_040Null,
         "None (data fectch only)",
@@ -177,6 +178,7 @@ static TestCase test_cases[] = {
         "Multiplication/Shift",
         "Move16 fetch, target 68040/60"
     },
+
     {
         Aud_MixPacket_040Delta,
         "Delta Lookup",
@@ -196,15 +198,16 @@ static TestCase test_cases[] = {
 
 
 void EncodeL1D15(Sound* p_sound) {
+
+
     ULONG frames = p_sound->s_length >> 4;
     BYTE *p_data = p_sound->s_dataPtr;
 
-    for (ULONG f = 0; f<frames; ++f) {
-
-        for (int i=15; i > 0; --i) {
+    printf("Preencoding sample data at %p, %lu frames...\n", p_data, frames);
+    for (ULONG f = 0; f < frames; ++f) {
+        for (int i = 15; i > 0; --i) {
             p_data[i] -= p_data[i - 1];
         }
-
         p_data += CACHE_LINE_SIZE;
     }
 }
@@ -237,6 +240,7 @@ int main(void) {
         load_sample("sounds/airstrike.raw", &sound);
 
         inverse.s_dataPtr = AllocCacheAligned(sound.s_length, MEMF_FAST);
+        inverse.s_length  = sound.s_length;
         for (int s = 0; s < sound.s_length; ++s) {
             inverse.s_dataPtr[s] = - sound.s_dataPtr[s];
         }
@@ -247,7 +251,7 @@ int main(void) {
 
         for (size_t test = 0; test < sizeof(test_cases)/sizeof(TestCase); ++test) {
 
-            if (Aud_MixPacket_040PreDelta == test_cases->mix_function) {
+            if (Aud_MixPacket_040PreDelta == test_cases[test].mix_function) {
                 EncodeL1D15(&sound);
                 EncodeL1D15(&inverse);
             }
