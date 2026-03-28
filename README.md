@@ -42,7 +42,7 @@ Overview:
     - This transfer is intended to make use of cache line moves in the 040/060 to avoid polluting the data cache.
     - Depending on the CPU, lookup tables or direct multiplcation is used to scale the 8-bit sample data into a 16-bit intermediate.
     - The 16-bit intermediate data are accumulated into a Mixing Buffer.
- 
+
 - Dynamics analysis is performed on the Mixing Buffer. This determines two values:
     - A scale factor for the 16-bit mixed data that permits conversion to 8-bit
     - The ideal hardware channel volume for Paula to replay the 8-bit data at.
@@ -162,3 +162,133 @@ This is still significantly better than the linear case. For completeness, a plo
 ![Line Hit Rate Simulations](./design/LUT_CacheLog.png)
 
 The performance of the cache could be improved by storing only the positive values in these tables, halving the storage required. However, this needs to be weighed against the cost of dealing with the sign handling.
+
+## Real Hardware Tests
+
+Testing of the mixing and normalisation logic was performed on both 68060 and 68040 hardware. The following tests were performed using an 8-bit sound file bytes mixed between 1-16 channels. Source channels were spread between left and right and were offset slightly to ensure that the same immediate data for each active channel was not repeatedly refetched. In any case, since source data are fetched using move16, cache should not have been a factor.
+
+- Sound Length: 60460 bytes
+- Mixing rate: 16000 Hz
+- Update rate: 50Hz
+- Packet Size: 320 samples
+- Total Mixed: 189
+- Measurement: EClock, 709379 Hz
+
+The following test cases were executed:
+
+- Null: The data are fetched and output written but no mixing logic is executed. This gives the baseline IO contribution to the total time.
+- Mul: 8-bit samples are multiplied by the L/R channel volumes to obtain the 16-bit intermediate for mixing.
+- Shift: 8-bit samples are shifted by the neareast power of 2 approximant of the L/R channel volume to obtain the 16-bit intermediate for mixing.
+- LUT: 8-bit samples are converted to 16-bit intermediates using a LUT for the L/R volume levels.
+- Delta LUT: 8-bit samples are converted on-the-fly to delta value and looked up using a LUT for the L/R volume levels (tighter cache hit) and then integrated to produce the 16-bit intermediate for mixing.
+- Delta LUT PreEnc: 8-bit samples are first pre-encoded into frames of 1 linear sample followed by 15 delta values that are looked up using the L/R volume levels (tighter cache hit) and then integrated to produce the 16-bit intermediate for mixing.
+
+In all cases, normalisation uses multiplication or shift, per 16-sample frame, depending on whether or not the normalisation factor lookup is an exact power of 2 or not.
+
+The expectation was that for the 68060, the Mul test case should perform best, whereas for 68040, the multiplicaton should be more costly than the other options.
+
+### 68060 / 50MHz Results
+
+The raw test results for the 68060 @ 50MHz were as follows. All timing values are in EClock counts.
+
+| **Channels** | **Null** | **Mul** | **Shift** | **LUT** | **Delta LUT** | **Delta LUT PreEnc** |
+| ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+| **1** | 28091 | 47943 | 48941 | 50908 | 51653 | 50401 |
+| **2** | 32478 | 64917 | 68683 | 73036 | 75233 | 72371 |
+| **3** | 34929 | 79624 | 82186 | 91123 | 94751 | 90496 |
+| **4** | 37561 | 94172 | 96897 | 109890 | 114344 | 109184 |
+| **5** | 39778 | 108015 | 111798 | 127994 | 134937 | 127111 |
+| **6** | 42932 | 122202 | 126199 | 145942 | 155077 | 146079 |
+| **7** | 45105 | 136846 | 141283 | 165852 | 175402 | 164857 |
+| **8** | 48237 | 151261 | 155747 | 186309 | 197675 | 184502 |
+| **9** | 50233 | 165008 | 170288 | 202551 | 216831 | 203924 |
+| **10** | 52975 | 179984 | 185352 | 222043 | 236820 | 221640 |
+| **11** | 55874 | 193753 | 199467 | 239704 | 255212 | 239556 |
+| **12** | 58548 | 208361 | 214552 | 258584 | 275194 | 256937 |
+| **13** | 60968 | 222461 | 229121 | 275865 | 294581 | 277273 |
+| **14** | 64066 | 236959 | 243713 | 294273 | 315643 | 294712 |
+| **15** | 65825 | 250189 | 257308 | 312876 | 332874 | 314401 |
+| **16** | 67801 | 260117 | 267358 | 323808 | 346663 | 325140 |
+
+![68060 50MHz](./doc_images/68060_50_results.png)
+
+### 68040 / 40MHz Results
+
+The raw test results for the 68060 @ 50MHz were as follows. All timing values are in EClock counts.
+
+| **Channels** | **Null** | **Mul** | **Shift** | **LUT** | **Delta LUT** | **Delta LUT PreEnc** |
+| ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+| **1** | 41524 | 112562 | 100412 | 102473 | 103494 | 101889 |
+| **2** | 45230 | 172102 | 142452 | 143769 | 146675 | 142785 |
+| **3** | 48619 | 227313 | 181257 | 179946 | 184470 | 178062 |
+| **4** | 52148 | 281511 | 220722 | 215978 | 221333 | 214533 |
+| **5** | 56098 | 336082 | 260411 | 262979 | 265491 | 253530 |
+| **6** | 59533 | 399388 | 299921 | 302454 | 311530 | 295583 |
+| **7** | 63265 | 446608 | 340293 | 344982 | 358642 | 335529 |
+| **8** | 67060 | 499864 | 378202 | 387834 | 393745 | 373664 |
+| **9** | 70024 | 554432 | 417917 | 424685 | 431983 | 411765 |
+| **10** | 74019 | 608261 | 456530 | 461663 | 469907 | 446064 |
+| **11** | 77708 | 661827 | 495774 | 500451 | 509093 | 479114 |
+| **12** | 82480 | 722105 | 542505 | 535603 | 544752 | 514391 |
+| **13** | 84609 | 771687 | 574277 | 580778 | 586409 | 553134 |
+| **14** | 88622 | 825086 | 613807 | 615716 | 633521 | 592174 |
+| **15** | 92185 | 878710 | 654961 | 655865 | 666312 | 631658 |
+| **16** | 95312 | 910019 | 675072 | 680289 | 688416 | 647546 |
+
+![68040 40MHz](./doc_images/68040_40_results.png)
+
+## Analysis
+
+At all channel counts, the multiplication based mixing path is fastest for the 68060. This matches the expectation based on the 2-3 cycle time for the operation on this CPU. The 68060 at 50MHz can mix 16 channels in less time than the 68040 at 40MHz can mix 4 using the same code.
+
+For the 68040, there is no meaningful differnce between the Shift and LUT based mixing approaches, with the Delta LUT PreEnc having marginally better performance beyond 3 channels. This means that there is no point in sacrificing the mixing quality using the Shift approach since the peformance is not significantly better than any of the LUT approaches that would produce a result equivalent to the multiplciation path.
+
+Dividing all values by the total packet count of 189 and converting EClocks to actual elapsed time, we can get the total time to mix and convert 20ms of audio corresponding to a single update.
+
+### 68060 Time Per Packet (20ms), in ms
+
+| **Channels** | **Null** | **Mul** | **Shift** | **LUT** | **Delta LUT** | **Delta LUT PreEnc** |
+| ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+| **1** | 0.21 | 0.36 | 0.37 | 0.38 | 0.39 | 0.38 |
+| **2** | 0.24 | 0.48 | 0.51 | 0.54 | 0.56 | 0.54 |
+| **3** | 0.26 | 0.59 | 0.61 | 0.68 | 0.71 | 0.67 |
+| **4** | 0.28 | 0.70 | 0.72 | 0.82 | 0.85 | 0.81 |
+| **5** | 0.30 | 0.81 | 0.83 | 0.95 | 1.01 | 0.95 |
+| **6** | 0.32 | 0.91 | 0.94 | 1.09 | 1.16 | 1.09 |
+| **7** | 0.34 | 1.02 | 1.05 | 1.24 | 1.31 | 1.23 |
+| **8** | 0.36 | 1.13 | 1.16 | 1.39 | 1.47 | 1.38 |
+| **9** | 0.37 | 1.23 | 1.27 | 1.51 | 1.62 | 1.52 |
+| **10** | 0.40 | 1.34 | 1.38 | 1.66 | 1.77 | 1.65 |
+| **11** | 0.42 | 1.45 | 1.49 | 1.79 | 1.90 | 1.79 |
+| **12** | 0.44 | 1.55 | 1.60 | 1.93 | 2.05 | 1.92 |
+| **13** | 0.45 | 1.66 | 1.71 | 2.06 | 2.20 | 2.07 |
+| **14** | 0.48 | 1.77 | 1.82 | 2.19 | 2.35 | 2.20 |
+| **15** | 0.49 | 1.87 | 1.92 | 2.33 | 2.48 | 2.35 |
+| **16** | 0.51 | 1.94 | 1.99 | 2.42 | 2.59 | 2.43 |
+
+### 68060 Time Per Packet (20ms), in ms
+
+| **Channels** | **Null** | **Mul** | **Shift** | **LUT** | **Delta LUT** | **Delta LUT PreEnc** |
+| ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+| **1** | 0.31 | 0.84 | 0.75 | 0.76 | 0.77 | 0.76 |
+| **2** | 0.34 | 1.28 | 1.06 | 1.07 | 1.09 | 1.06 |
+| **3** | 0.36 | 1.70 | 1.35 | 1.34 | 1.38 | 1.33 |
+| **4** | 0.39 | 2.10 | 1.65 | 1.61 | 1.65 | 1.60 |
+| **5** | 0.42 | 2.51 | 1.94 | 1.96 | 1.98 | 1.89 |
+| **6** | 0.44 | 2.98 | 2.24 | 2.26 | 2.32 | 2.20 |
+| **7** | 0.47 | 3.33 | 2.54 | 2.57 | 2.67 | 2.50 |
+| **8** | 0.50 | 3.73 | 2.82 | 2.89 | 2.94 | 2.79 |
+| **9** | 0.52 | 4.14 | 3.12 | 3.17 | 3.22 | 3.07 |
+| **10** | 0.55 | 4.54 | 3.41 | 3.44 | 3.50 | 3.33 |
+| **11** | 0.58 | 4.94 | 3.70 | 3.73 | 3.80 | 3.57 |
+| **12** | 0.62 | 5.39 | 4.05 | 3.99 | 4.06 | 3.84 |
+| **13** | 0.63 | 5.76 | 4.28 | 4.33 | 4.37 | 4.13 |
+| **14** | 0.66 | 6.15 | 4.58 | 4.59 | 4.73 | 4.42 |
+| **15** | 0.69 | 6.55 | 4.89 | 4.89 | 4.97 | 4.71 |
+| **16** | 0.71 | 6.79 | 5.04 | 5.07 | 5.13 | 4.83 |
+
+We can conclude drom this that at the desired mixing rate of 16000Hz, the multiplcation path for the 68060/50MHz would consume a maximum of 9.7% of the target with all 16 channels playing. For the 68040/40MHz, the Delta LUT Pre Encoded path would require almost 25%. We can project from this that at 25MHz, assumung linear scaling that the the 68040 Delta LUT Pre Encoded path would require 7.73 ms, reaching 38.6%
+
+For the 68040, particularly at lower clock speeds, e.g. 25MHz 8 channels at 16000 Hz is probably the most acceptable.
+
+For slower machines, fewer channels and/or lower mixing rates might still produce a better acousitc result than the original since each input channel has independent left/right volume that can be adjusted as the sound is playing and the output dynamic range is higher than 8-bit..
