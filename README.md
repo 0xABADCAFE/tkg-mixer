@@ -268,7 +268,7 @@ Dividing all values by the total packet count of 189 and converting EClocks to a
 | **15** | 0.49 | 1.87 | 1.92 | 2.33 | 2.48 | 2.35 |
 | **16** | 0.51 | 1.94 | 1.99 | 2.42 | 2.59 | 2.43 |
 
-### 68060 Time Per Packet (20ms), in ms
+### 68040 Time Per Packet (20ms), in ms
 
 | **Channels** | **Null** | **Mul** | **Shift** | **LUT** | **Delta LUT** | **Delta LUT PreEnc** |
 | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
