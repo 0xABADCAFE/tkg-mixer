@@ -67,9 +67,9 @@ Overview:
 The game already has quite high system requirements. Consequently, the aim is to design with 68040/68060/Emulation in mind. This section is a bit of a brain dump.
 
 ### Concepts
-- Frame: A set of 16 sample values that will be processed together, including fetching, normalisation to a given volume, for playback.
-- Packet: A number of frames (min 1) that will be processed in a single mixing update operation.
-- Line: Any set of data that is aligned to and accessible as a cache line.
+- **Frame**: A set of 16 sample values that will be processed together, including fetching and normalisation to a given volume, for playback.
+- **Packet**: A number of _frames_ (min 1) that will be processed in a single mixing update operation.
+- **Line**: Any set of data that is aligned to and accessible as a cache line.
 
 ### CPU Considerations
 | Target | Feature | Implications |
@@ -140,7 +140,7 @@ This access pattern is still not ideal, given that there will be up to 16 frames
  |    1 |   34017 |  6.51 |
  |    2 |   11089 |  2.12 |
  | ... | ... | < 1 % |
-  |   29 |   10186 |  1.95 |
+ |   29 |   10186 |  1.95 |
  |   30 |   28590 |  5.47 |
  |   31 |  176334 | 33.73 |
 
@@ -236,6 +236,8 @@ The raw test results for the 68060 @ 50MHz were as follows. All timing values ar
 | **16** | 95312 | 910019 | 675072 | 680289 | 688416 | 647546 |
 
 ![68040 40MHz](./doc_images/68040_40_results.png)
+
+The difference between the LUT and Delta LUT Pre Encoded shows the impact of the improved cache hit rate but the result is somewhat marginal in practise. Since the pre-encoding would happen at load time and the end result is consistently better than the multiplication path, there is no real reason not to use it.
 
 ## Analysis
 
